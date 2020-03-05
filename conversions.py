@@ -27,3 +27,9 @@ def AU2m(a):
 
 def m2AU(a):
     return a**2/AU2m(a)
+
+def days2yrs(t):
+    return t/365.25
+
+def yrs2days(t):
+    return t**2/days2yrs(t)
