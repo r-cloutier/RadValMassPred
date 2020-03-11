@@ -136,8 +136,6 @@ def compute_Xenv(DRrcb, Mcore, Teq, Tkh, Xiron, Xice):
     '''
     Given the difference between rcb radius and the core radius, compute the
     envelope mass fraction from Eqs 4 and 13 in Owen & Wu 2017. 
-    
-    THIS WORKS
     '''
     assert DRrcb >= 0
     
