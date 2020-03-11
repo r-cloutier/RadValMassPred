@@ -49,8 +49,8 @@ def days2yrs(t):
 def yrs2days(t):
     return t**2/days2yrs(t)
 
-def sec2yrs(t):
-    return t / 60 / 60 / 24 / 365.25
+def sec2Myrs(t):
+    return t / 60 / 60 / 24 / 365.25 / 1e6
 
-def yrs2sec(t):
-    return t**2/sec2yrs(t)
+def Myrs2sec(t):
+    return t**2/sec2Myrs(t)

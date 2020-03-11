@@ -3,8 +3,8 @@ from imports import *
 
 def solidradius2mass(rp, Xiron, Xice):
     '''
-    Convert an input radius to into a mass assuming a solid planet using the 
-    MR-relation from Fortney et al 2007 
+    Convert an input radius to into a mass assuming a solid planet using the
+    MR-relation from Fortney et al 2007
     (https://arxiv.org/abs/astro-ph/0612671).
     '''
     # cannot use iron and ice together
@@ -12,21 +12,22 @@ def solidradius2mass(rp, Xiron, Xice):
 
     # solve for mass given radius by solving for the root of the MR functions
     if (Xiron > 0):
-        rho0 = 1 / mass2rad_iron(1, Xiron, 0)**3
+        rho0 = 1 / _mass2rad_iron(1, Xiron, 0)**3
         mp0 = rho0 * rp**3
-        return fsolve(mass2rad_iron, mp0, args=(Xiron, rp))
+        return fsolve(_mass2rad_iron, mp0, args=(Xiron, rp))
 
     else:
-        rho0 = 1 / mass2rad_ice(1, Xice, 0)**3
+        rho0 = 1 / _mass2rad_ice(1, Xice, 0)**3
         mp0 = rho0 * rp**3
-        return fsolve(mass2rad_ice, mp0, args=(Xice, rp))
+        return fsolve(_mass2rad_ice, mp0, args=(Xice, rp))
 
 
+    
 
 def mass2solidradius(mp, Xiron, Xice):
     '''
-    Convert an input mass to into a radius assuming a solid planet using the 
-    MR-relation from Fortney et al 2007 
+    Convert an input mass to into a radius assuming a solid planet using the
+    MR-relation from Fortney et al 2007
     (https://arxiv.org/abs/astro-ph/0612671).
     '''
     # cannot use iron and ice together
@@ -34,13 +35,249 @@ def mass2solidradius(mp, Xiron, Xice):
 
     # solve for mass given radius by solving for the root of the MR functions
     if (Xiron > 0):
-        return mass2rad_iron(mp, Xiron)
+        return _mass2rad_iron(mp, Xiron)
     else:
-        return mass2rad_ice(mp, Xice)    
+        return _mass2rad_ice(mp, Xice)
 
 
 
-def mass2rad_iron(mp, Xiron, rp=0):
+    
+def compute_rhorcb(Xenv, Rrcb, Mcore, Teq, Tkh, Xiron, Xice):
+    '''
+    Compute the density at the radiative-convective boundary using Eq 13 from 
+    Owen & Wu 2017.
+    '''
+    # compute the ratio I2/I1
+    Rcore = mass2solidradius(Mcore, Xiron, Xice)
+    DR = Rrcb - Rcore
+    assert DR >= 0    # the rcb must be above the core
+    depth_env = DR/Rcore
+    I1, I2 = compute_I1_I2(depth_env)
+    I2_I1 = I2/I1
+
+    # compute the density of the rcb
+    a = 1/(1+alpha)
+    rhorcb = (mu/Kb) * I2_I1**a
+    rhorcb *= (64*np.pi*sigma * Teq**(3-alpha-beta) * Rearth2cm(Rrcb)*Myrs2sec(Tkh))**a
+    rhorcb *= (3*kappa0 * Mearth2g(Mcore)*Xenv)**(-a)
+ 
+    return float(rhorcb)
+
+
+
+
+def solve_radius_structure(Xenv, Mcore, Teq, Tkh, Xiron, Xice):
+    '''
+    Given an envelope mass fraction, calculate the radius of the 
+    radiative-convective boundary and the full planet radius that includes the
+    isothermal layers above the rcb.
+    '''
+    Rcore = mass2solidradius(Mcore, Xiron, Xice)    
+
+    # estimate DR = Rrcb-Rcore from Eq 17 Owen & Wu 2017
+    DR_guess = 2*Rcore * (Xenv/0.027)**(1/1.31) * (Mcore/5)**(-0.17)
+    # solve for Rrcb
+    args = Xenv, Mcore, Teq, Tkh, Xiron, Xice
+    DR_solution = 10**float(fsolve(_solve_Rrcb, np.log10(DR_guess), args=args))
+    Rrcb = DR_solution + Rcore
+
+    # compute the full planet radius
+    rho_rcb = compute_rhorcb(Xenv, Rrcb, Mcore, Teq, Tkh, Xiron, Xice)
+    Rp_full, f = compute_full_Rp(Rrcb, Mcore, Teq, rho_rcb)
+
+    return Rrcb, Rp_full, f
+
+
+
+
+def compute_full_Rp(Rrcb, Mcore, Teq, rho_rcb):
+    '''
+    Compute the full planet radius that includes isothermal layers above 
+    the rcb.
+    '''
+    # now calculate the densities at the photosphere
+    a = 1/(1+alpha)
+    _,rho_phot = compute_photosphere(Mcore, Rrcb, Teq)
+    assert rho_phot <= rho_rcb
+    
+    # calculate the fractional difference between the rcb and photospheric radii
+    cs2 = Kb * Teq / mu
+    H = cm2Rearth(cs2 * Rearth2cm(Rrcb)**2 / (G * Mearth2g(Mcore)))
+    f = float(1 + (H/Rrcb) * np.log(rho_rcb / rho_phot))
+    assert f >= 1
+    Rp_full = f*Rrcb
+
+    return Rp_full, f
+
+
+
+def compute_photosphere(Mp, Rp, Teq):
+    '''Compute the pressure and density at the photosphere in cgs units.'''
+    a = 1/(1+alpha)
+    g = G * Mearth2g(Mp) / Rearth2cm(Rp)**2
+    pressure_phot = (2*g / (3 * kappa0 * Teq**beta))**a  # cgs
+    rho_phot = pressure_phot * mu / (Kb * Teq)  # cgs
+    return pressure_phot, rho_phot
+
+
+
+def compute_I1_I2(depth_env):
+    '''depth_env = (R1 - R2) / R2'''
+    depth_env = np.ascontiguousarray(depth_env)
+    I1, I2 = np.zeros(depth_env.size), np.zeros(depth_env.size)
+    for i in range(I1.size):
+        I1[i] = quad(_integrand1, 1/(depth_env[i]+1), 1, args=gamma)[0]
+        I2[i] = quad(_integrand2, 1/(depth_env[i]+1), 1, args=gamma)[0]
+    return I1, I2
+
+
+
+def compute_Xenv(DRrcb, Mcore, Teq, Tkh, Xiron, Xice):
+    '''
+    Given the difference between rcb radius and the core radius, compute the
+    envelope mass fraction from Eqs 4 and 13 in Owen & Wu 2017. 
+    
+    THIS WORKS
+    '''
+    assert DRrcb >= 0
+    
+    # setup variables
+    Rcore = mass2solidradius(Mcore, Xiron, Xice)
+    rho_core = 3*Mearth2g(Mcore) / (4*np.pi*Rearth2cm(Rcore)**3)
+    cs2 = Kb * Teq / mu
+
+    Rrcb = DRrcb + Rcore
+    depth_env = DRrcb / Rcore
+
+    # dimensionless integrals
+    I1, I2 = compute_I1_I2(depth_env)
+    I2_I1 = I2/I1
+
+    # compute a proxy of the density at the rcb
+    a = 1/(1+alpha)   
+    rho_rcb_without_X_term = (mu/Kb) * I2_I1**a
+    rho_rcb_without_X_term *= (64*np.pi*sigma*Teq**(3-alpha-beta))**a
+    rho_rcb_without_X_term *= (Rearth2cm(Rrcb) * Myrs2sec(Tkh))**a
+    rho_rcb_without_X_term /= (3*kappa0 * Mearth2g(Mcore))**a
+
+    # evaluate the envelope mass fraction using Eqs 4 & 13 from Owen & Wu 2017
+    b = 1/(gamma-1)
+    RHS = 4*np.pi*Rearth2cm(Rrcb)**3 * rho_rcb_without_X_term
+    RHS *= (grad_ab * G*Mearth2g(Mcore) / (cs2*Rearth2cm(Rrcb)))**b
+    RHS *= I2
+    RHS /= Mearth2g(Mcore)
+    Xenv = float(RHS**(1/(1+1/(1+alpha))))
+    
+    return Xenv
+
+
+
+def compute_Xenv_rad(Rp, Mcore, Teq, Xiron, Xice):
+    # this occurs when the approximation between equations 2 & 3
+    # in owen & Wu (2017) breaks down
+
+    # now calculate the densities at the photosphere
+    
+    _,rho_phot = compute_photosphere(Mcore, Rp, Teq)
+    cs2 = Kb * Teq / mu
+    H = cm2Rearth(cs2 * Rearth2cm(Rp)**2 / (G * Mearth2g(Mcore)))
+
+    # calculate the mass in the radiative layer
+    Rcore = mass2solidradius(Mcore, Xiron, Xice)
+    assert Rcore <= Rp
+    rho_surf = rho_phot * np.exp((Rp-Rcore) / H)
+    assert rho_surf > rho_phot
+
+    # integrate from zero -> Rp-Rcore to get mass within the radiative region
+    args = rho_surf, Rearth2cm(Rcore), Rearth2cm(H)
+    Menv_int = quad(_Menv_integrand_cgs, Rearth2cm(Rcore), Rearth2cm(Rp),
+                    args=args)[0]
+    
+    # get envelope mass fraction
+    Xenv = Menv_int / Mcore
+
+    return Xenv
+
+
+
+def _Menv_integrand_cgs(r, rho_surf_cgs, Rcore_cgs, H_cgs):
+    K = 4*np.pi*rho_surf_cgs
+    return g2Mearth(K * np.exp(-(r-Rcore_cgs) / H_cgs) * r**2)
+
+
+
+def _solve_Rrcb(lg_DR, Xenv, Mcore, Teq, Tkh, Xiron, Xice):
+    '''
+    Function from Eqs 4 and 13 in Owen & Wu 2017 to solve for the radius 
+    difference between the rcb and the core.
+    '''
+    # recover Rrcb
+    Rcore = mass2solidradius(Mcore, Xiron, Xice)
+    depth_env = 10**lg_DR / Rcore
+    Rrcb = 10**lg_DR + Rcore
+    # get density at the rcb
+    rho_rcb = compute_rhorcb(Xenv, Rrcb, Mcore, Teq, Tkh, Xiron, Xice)
+
+    # compute remaining values
+    rho_core = 3*Mearth2g(Mcore) / (4*np.pi*Rearth2cm(Rcore)**3)
+    _,I2 = compute_I1_I2(depth_env)
+    cs2 = Kb * Teq / mu
+
+    # estimate envelope mass fraction given the rcb properties
+    # Eqs 4 Owen & Wu 2017
+    Xguess = 3*(Rrcb / Rcore)**3
+    Xguess *= (rho_rcb / rho_core)
+    Xguess *= (grad_ab * (G*Mearth2g(Mcore))/(cs2*Rearth2cm(Rrcb)))**(1/(gamma-1))
+    Xguess *= I2
+ 
+    return Xguess - Xenv
+
+
+
+def Rp_solver(Rp_now, Mcore, Teq, age_Myr, Xiron, Xice):
+
+    #this solves for the planet structure to match radii
+    Rcore = ps.mass2solidradius(Mcore,Xiron,Xice)
+    assert Rp_now >= Rcore
+    
+    lg_DRrcb0 = np.log10(Rp_now - Rcore)
+    args = Rp_now, Teq, Mcore, age_Myr, Xiron, Xice
+    lg_DRrcb = fsolve(_Rp_solver_function, lg_DRrcb0, args=args)
+    
+    # now evaluate planet structure
+    DRrcb = 10**lg_DRrcb
+    cs2 = Kb * Teq / mu
+    H = cm2Rearth(cs2 * Rearth2cm(Rp_now)**2 / (G * Mearth2g(Mcore)))
+
+    if (DRrcb/H < 1):  # no convective zone
+        Xenv = ps.compute_Xenv_rad(Rp_now, Mcore, Teq, Xiron, Xice)
+        _,Rp_full,_ = ps.solve_radius_structure(Xenv, Mcore, Teq, age_Myr,
+                                                Xiron, Xice)
+        
+    else:
+        Xenv = ps.compute_Xenv(DRrcb, Mcore, Teq, Tkh, Xiron, Xice)
+        _,Rp_full,_ = ps.solve_radius_structure(Xenv, Mcore, Teq, age_Myr,
+                                                Xiron, Xice)
+
+    return Xenv, Rp_full
+
+
+
+def _Rp_solver_function(lg_DRrcb, Rp_now, Teq, Mcore, Tkh, Xiron, Xice):
+
+    #this function solves for the planet structure to match radii
+    DRrcb = 10**lg_DRrcb
+
+    # evaluate the envelope mass fraction and planet structure for this guess
+    Xenv = ps.compute_Xenv(DRrcb, Mcore, Teq, Tkh, Xiron, Xice)
+
+    _,Rp_full,_ = ps.solve_radius_structure(Xenv, Mcore, Teq, Tkh, Xiron, Xice)
+    
+    return Rp_now - Rp_full
+
+
+
+def _mass2rad_iron(mp, Xiron, rp=0):
     '''Compute the difference between the radius and the predicted radius
     of solid rocky/iron body given its mass. Need the difference to solve for
     the root of the quadratic.'''
@@ -51,7 +288,9 @@ def mass2rad_iron(mp, Xiron, rp=0):
     return rpfunc(np.log10(mp)) - rp
 
 
-def mass2rad_ice(mp, Xice, rp=0):
+
+
+def _mass2rad_ice(mp, Xice, rp=0):
     '''Compute the difference between the radius and the predicted radius
     of solid icy/rocky body given its mass.'''
     rpfunc = np.poly1d([0.0912 * Xice + 0.1603,
@@ -60,96 +299,10 @@ def mass2rad_ice(mp, Xice, rp=0):
     return rpfunc(np.log10(mp)) - rp
 
 
-def integrand1(x, gamma):
+
+def _integrand1(x, gamma):
     return x * (1/x-1)**(1/(gamma-1))
 
 
-def integrand2(x, gamma):
+def _integrand2(x, gamma):
     return x**2 * (1/x-1)**(1/(gamma-1))
-
-
-def compute_I2_I1(DR_ratio):
-    DR_ratio = np.ascontiguousarray(DR_ratio)
-    I2, ratio = np.zeros(DR_ratio.size), np.zeros(DR_ratio.size)
-    for i in range(ratio.size):
-        I2[i] = quad(integrand2, 1/(DR_ratio[i]+1), 1, args=gamma)[0]
-        I1 = quad(integrand1, 1/(DR_ratio[i]+1), 1, args=gamma)
-        ratio[i] = I2[i]/I1[0]
-    return I2, ratio
-
-
-
-def compute_rho_rcb(DRrcb, Xenv, Mcore, Teq, Tkh_Myr, Xiron, Xice):
-    '''
-    Compute the density of at the radiative-convective boundary. Eq 13 
-    in Owen & Wu 2017 (https://arxiv.org/abs/1705.10810).
-    '''
-    Rcore = mass2solidradius(Mcore, Xiron, Xice)
-    Rrcb = DRrcb + Rcore
-    DR_ratio = DRrcb / Rcore
-    _,I2_I1 = compute_I2_I1(DR_ratio)
-    
-    # Eq 13 in Owen & Wu 2017 for the RCB density
-    a = 1 / (1+alpha)
-    rho_rcb = (mu / Kb)
-    rho_rcb *= I2_I1**a
-    rho_rcb *= (64*np.pi*sigma * Teq**(3-alpha-beta) * \
-                Rearth2cm(Rrcb) * yrs2sec(Tkh_Myr*1e6))**a
-    rho_rcb *= (3*kappa0*Mearth2g(Mcore)*Xenv)**(-a)
-    return rho_rcb
-
-
-def compute_mass_loss_efficiency(mp, rp):
-    # mass loss efficiency from Owen & Wu 2017
-    vesc = np.sqrt(2*G*Mearth2g(mp)/Rearth2cm(rp))
-    eta = 0.1 * (1.5e6/vesc)**2
-    return eta
-
-
-def compute_X(DRrcb, Teq, Mcore, Tkh_Myr, Xiron, Xice):
-    '''
-    Compute the envelope mass fraction at the radiative-convective boundary
-    below which the entirety of the atmosphere is assumed to exist.
-    '''
-    # evaluate the core
-    Rcore = mass2solidradius(Mcore, Xiron, Xice)
-    rhocore = 3*Mearth2g(Mcore) / (4*np.pi*Rearth2cm(Rcore)**3)  # g/cm3 
-
-    # evaulate the RCB
-    cs2 = Kb*Teq / mu
-    Rrcb = DRrcb + Rcore
-    DR_ratio = DRrcb / Rcore
-
-    # compute integrals
-    I2, I2_I1 = compute_I2_I1(DR_ratio)
-
-    # Eq 13 in Owen & Wu 2017 for the RCB density but without the X factor
-    a = 1 / (1+alpha)
-    rho_rcb_noX = (mu / Kb)
-    rho_rcb_noX *= I2_I1**a
-    rho_rcb_noX *= (64*np.pi*sigma * Teq**(3-alpha-beta))**a
-    rho_rcb_noX *= (Rearth2cm(Rrcb) * yrs2sec(Tkh_Myr*1e6))**a
-    rho_rcb_noX *= (3*kappa0 * Mearth2g(Mcore))**(-a)
-
-    # evaluate the envelope mass fraction
-    LHS = 3*(Rrcb/Rcore)**3 * rho_rcb_noX / rhocore
-    LHS *= (grad_ab * G*Mearth2g(Mcore)/(cs2*Rearth2cm(Rrcb)))**(1/(gamma-1))
-    LHS *= I2
-    
-    Xenv = LHS**(1 / (1+1/(1+alpha)))
-
-    # compute the full planet radius w/ radiative zone over the rcb
-    rho_rcb = compute_rho_rcb(DRrcb, Xenv, Mcore, Teq, Tkh_Myr,
-                              Xiron, Xice)
-    
-    # evaluate the photosphere
-    pressure_phot = (2/3 * \
-                     (G*Mearth2g(Mcore) / \
-                      (Rearth2cm(Rrcb)**2 * kappa0*Teq**beta)))**(1/(1+alpha))
-    rho_phot = pressure_phot*mu / (Kb*Teq)
-
-    # compute the full planet radius
-    H = cs2 * Rearth2cm(Rrcb)**2 / (G*Mearth2g(Mcore))
-    f = 1 + (H/Rearth2cm(Rrcb)) * np.log(rho_rcb / rho_phot)
-    Rplanet = f*Rrcb
-    return Xenv, f, Rplanet
