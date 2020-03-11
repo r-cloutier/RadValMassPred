@@ -170,31 +170,111 @@ def compute_Xenv(DRrcb, Mcore, Teq, Tkh, Xiron, Xice):
 
 
 
-def compute_Xenv_rad(Rp, Mcore, Teq, Xiron, Xice):
-    # this occurs when the approximation between equations 2 & 3
-    # in owen & Wu (2017) breaks down
-
-    # now calculate the densities at the photosphere
+def compute_Xenv_rad(Rp, Mcore, Teq, age_Myr, Xiron, Xice):
+    '''
+    Compute the envelope mass fraction in a fully radiative layer. This should
+    only be used when the radius solver finds an rcb that is shallower than 
+    the atmospheric scale height. 
+    '''
+    # check that no convective layer is present
+    Rcore = mass2solidradius(Mcore, Xiron, Xice)
+    lg_DRrcb0 = np.log10(Rp - Rcore)
+    args = Rp, Teq, Mcore, age_Myr, Xiron, Xice
+    DRrcb = 10**fsolve(_Rp_solver_function, lg_DRrcb0, args=args)
+    cs2 = Kb * Teq / mu
+    H = cm2Rearth(cs2 * Rearth2cm(Rp)**2 / (G * Mearth2g(Mcore)))
+    if DRrcb > H:
+        raise ValueError('A convective layer is present. Should use compute_Xenv instead of compute_Xenv_rad.')
     
+    # setup variables
     _,rho_phot = compute_photosphere(Mcore, Rp, Teq)
     cs2 = Kb * Teq / mu
     H = cm2Rearth(cs2 * Rearth2cm(Rp)**2 / (G * Mearth2g(Mcore)))
 
     # calculate the mass in the radiative layer
     Rcore = mass2solidradius(Mcore, Xiron, Xice)
-    assert Rcore <= Rp
+    if Rcore > Rp:
+        raise ValueError('Core radius exceeds the planet radius. Try increasing the mass fraction of dense material (i.e. iron compared to MgS rock of rock compared to water ice.')
+
     rho_surf = rho_phot * np.exp((Rp-Rcore) / H)
-    assert rho_surf > rho_phot
+    if rho_surf < rho_phot:
+        raise ValueError('Atmospheric density at the surface is less than the photospheric density.')
 
     # integrate from zero -> Rp-Rcore to get mass within the radiative region
     args = rho_surf, Rearth2cm(Rcore), Rearth2cm(H)
     Menv_int = quad(_Menv_integrand_cgs, Rearth2cm(Rcore), Rearth2cm(Rp),
                     args=args)[0]
-    
-    # get envelope mass fraction
+
     Xenv = Menv_int / Mcore
 
     return Xenv
+
+
+
+def Rp_solver(Rp_now, Mcore, Teq, age_Myr, Xiron, Xice):
+    '''
+    Solve for the planet structure of the gaseous planet to be consistent with 
+    the observed radius.
+    '''
+    # 
+    Rcore = mass2solidradius(Mcore,Xiron,Xice)
+    if Rcore > Rp_now:
+        raise ValueError('Core radius exceeds the planet radius. Try increasing the mass fraction of dense material (i.e. iron compared to MgS rock of rock compared to water ice.')
+    
+    lg_DRrcb0 = np.log10(Rp_now - Rcore)
+    args = Rp_now, Teq, Mcore, age_Myr, Xiron, Xice
+    lg_DRrcb = fsolve(_Rp_solver_function, lg_DRrcb0, args=args)
+    
+    # now evaluate planet structure
+    DRrcb = 10**lg_DRrcb
+    cs2 = Kb * Teq / mu
+    H = cm2Rearth(cs2 * Rearth2cm(Rp_now)**2 / (G * Mearth2g(Mcore)))
+
+    if (DRrcb < H):  # i.e. no convective zone
+        Xenv = compute_Xenv_rad(Rp_now, Mcore, Teq, age_Myr, Xiron, Xice)
+        _,Rp_full,_ = solve_radius_structure(Xenv, Mcore, Teq, age_Myr,
+                                             Xiron, Xice)
+        
+    else:
+        Xenv = compute_Xenv(DRrcb, Mcore, Teq, age_Myr, Xiron, Xice)
+        _,Rp_full,_ = solve_radius_structure(Xenv, Mcore, Teq, age_Myr,
+                                             Xiron, Xice)
+
+    return Xenv, Rp_full
+
+
+
+
+def _Rp_solver_function(lg_DRrcb, Rp_now, Teq, Mcore, Tkh, Xiron, Xice):
+    '''Function to match the planet radius solution to the observed radius.'''
+    Xenv = compute_Xenv(10**lg_DRrcb, Mcore, Teq, Tkh, Xiron, Xice)
+    Rrcb,Rp_full,_ = solve_radius_structure(Xenv, Mcore, Teq, Tkh, Xiron, Xice)
+    return Rp_now - Rp_full
+
+
+
+
+def _mass2rad_iron(mp, Xiron, rp=0):
+    '''Compute the difference between the radius and the predicted radius
+    of solid rocky/iron body given its mass. Need the difference to solve for
+    the root of the quadratic.'''
+    Xrock = 1 - Xiron
+    rpfunc = np.poly1d([0.0592 * Xrock + 0.0975,
+                        0.2337 * Xrock + 0.4938,
+                        0.3102 * Xrock + 0.7932])
+    return rpfunc(np.log10(mp)) - rp
+
+
+
+
+def _mass2rad_ice(mp, Xice, rp=0):
+    '''Compute the difference between the radius and the predicted radius
+    of solid icy/rocky body given its mass.'''
+    rpfunc = np.poly1d([0.0912 * Xice + 0.1603,
+                        0.3330 * Xice + 0.7378,
+                        0.4639 * Xice + 1.1193])
+    return rpfunc(np.log10(mp)) - rp
+
 
 
 
@@ -229,72 +309,6 @@ def _solve_Rrcb(lg_DR, Xenv, Mcore, Teq, Tkh, Xiron, Xice):
     Xguess *= I2
  
     return Xguess - Xenv
-
-
-
-def Rp_solver(Rp_now, Mcore, Teq, age_Myr, Xiron, Xice):
-
-    #this solves for the planet structure to match radii
-    Rcore = ps.mass2solidradius(Mcore,Xiron,Xice)
-    assert Rp_now >= Rcore
-    
-    lg_DRrcb0 = np.log10(Rp_now - Rcore)
-    args = Rp_now, Teq, Mcore, age_Myr, Xiron, Xice
-    lg_DRrcb = fsolve(_Rp_solver_function, lg_DRrcb0, args=args)
-    
-    # now evaluate planet structure
-    DRrcb = 10**lg_DRrcb
-    cs2 = Kb * Teq / mu
-    H = cm2Rearth(cs2 * Rearth2cm(Rp_now)**2 / (G * Mearth2g(Mcore)))
-
-    if (DRrcb/H < 1):  # no convective zone
-        Xenv = ps.compute_Xenv_rad(Rp_now, Mcore, Teq, Xiron, Xice)
-        _,Rp_full,_ = ps.solve_radius_structure(Xenv, Mcore, Teq, age_Myr,
-                                                Xiron, Xice)
-        
-    else:
-        Xenv = ps.compute_Xenv(DRrcb, Mcore, Teq, Tkh, Xiron, Xice)
-        _,Rp_full,_ = ps.solve_radius_structure(Xenv, Mcore, Teq, age_Myr,
-                                                Xiron, Xice)
-
-    return Xenv, Rp_full
-
-
-
-def _Rp_solver_function(lg_DRrcb, Rp_now, Teq, Mcore, Tkh, Xiron, Xice):
-
-    #this function solves for the planet structure to match radii
-    DRrcb = 10**lg_DRrcb
-
-    # evaluate the envelope mass fraction and planet structure for this guess
-    Xenv = ps.compute_Xenv(DRrcb, Mcore, Teq, Tkh, Xiron, Xice)
-
-    _,Rp_full,_ = ps.solve_radius_structure(Xenv, Mcore, Teq, Tkh, Xiron, Xice)
-    
-    return Rp_now - Rp_full
-
-
-
-def _mass2rad_iron(mp, Xiron, rp=0):
-    '''Compute the difference between the radius and the predicted radius
-    of solid rocky/iron body given its mass. Need the difference to solve for
-    the root of the quadratic.'''
-    Xrock = 1 - Xiron
-    rpfunc = np.poly1d([0.0592 * Xrock + 0.0975,
-                        0.2337 * Xrock + 0.4938,
-                        0.3102 * Xrock + 0.7932])
-    return rpfunc(np.log10(mp)) - rp
-
-
-
-
-def _mass2rad_ice(mp, Xice, rp=0):
-    '''Compute the difference between the radius and the predicted radius
-    of solid icy/rocky body given its mass.'''
-    rpfunc = np.poly1d([0.0912 * Xice + 0.1603,
-                        0.3330 * Xice + 0.7378,
-                        0.4639 * Xice + 1.1193])
-    return rpfunc(np.log10(mp)) - rp
 
 
 
