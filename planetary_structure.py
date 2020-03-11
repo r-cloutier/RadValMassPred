@@ -211,7 +211,7 @@ def compute_Xenv_rad(Rp, Mcore, Teq, age_Myr, Xiron, Xice):
 
 
 
-def Rp_solver(Rp_now, Mcore, Teq, age_Myr, Xiron, Xice):
+def Rp_solver_gas(Rp_now, Mcore, Teq, age_Myr, Xiron, Xice):
     '''
     Solve for the planet structure of the gaseous planet to be consistent with 
     the observed radius.
