@@ -61,8 +61,8 @@ def compute_tmdot(Xenv, P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
    
     # this is the expression in EvapMass which I think has the wrong scaling with eta
     # verbatim from mass_loss.tmdot_rocky:tmdot = X * Mcore**2. * sep_cm**2. * eff / Rplanet**3.
-    sma = Ms**(1/3) * (P/365.25)**(2/3)
-    tmdot = Xenv * Mcore**2 * sma**2 * eta / Rp_full)
+    #sma = Ms**(1/3) * (P/365.25)**(2/3)
+    #tmdot = Xenv * Mcore**2 * sma**2 * eta / Rp_full
  
     return tmdot, depth_env
 
@@ -96,7 +96,13 @@ def _Mp_gas_to_solve(lg_Mcore, P, Ms, Teq, Tkh, Xiron, Xice, Rp_now, age,
         raise ValueError('No self-consistent structure.')
 
     # compute gaseous planet mass loss timescale
-    tmdot_gaseous,_ = compute_tmdot(Xenv, P, Ms, Mcore, Teq, Tkh, Xiron, Xice)
+    # TEMP
+    #tmdot_gaseous,_ = compute_tmdot(Xenv, P, Ms, Mcore, Teq, Tkh, Xiron, Xice)
+    eta = compute_mass_loss_efficiency(Mcore, Rp_full)
+    sma = Ms**(1/3) * (P/365.25)**(2/3)
+    tmdot_gaseous = Xenv * Mcore**2 * AU2cm(sma)**2 * eta / Rearth2cm(Rp_full)**3
+    ##print(Xenv, Mcore, AU2cm(sma), eta, Rearth2cm(Rp_full), tmdot_gaseous)
+
 
     return tmdot_gaseous - tmdot_rocky
 

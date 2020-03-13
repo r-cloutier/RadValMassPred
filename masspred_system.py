@@ -48,10 +48,12 @@ class two_planet_system:
             
         # save as a rocky or gaseous planet
         if p.is_rocky:
+            delattr(p, 'is_rocky')
             self.planet_rocky = p
         else:
+            delattr(p, 'is_rocky')
             self.planet_gaseous = p
-
+            
         # get number of planets as either 0, 1, or 2
         self.Nplanets = np.sum(np.array([self.planet_rocky,
                                          self.planet_gaseous]) != None)
@@ -126,7 +128,6 @@ class two_planet_system:
             Xicei_gas = sample(self.planet_gaseous.Xicesamples)
             
             # solve for Xenv that maximizes the rocky planet mass loss timescale
-            N = int(size)
             args = Pi_rock, Msi, mpi_rock, Teqi_rock, Tkhi_rock, Xironi_rock, Xicei_rock
 
             # compute the rocky planet core radius
@@ -144,7 +145,7 @@ class two_planet_system:
                 p = phev.compute_tmdot(self.planet_rocky.Xenvmax_samples[i], *args)
                 self.planet_rocky.tmdotmax_samples[i] = p[0]
                 self.planet_rocky.depthenvmax_samples[i] = p[1]
-            
+        
             else:
                 try:
                     # solve for maximum tmdot
@@ -156,10 +157,15 @@ class two_planet_system:
                     self.planet_rocky.Rrcbmax_samples[i] = p[0]
                     self.planet_rocky.Rpfullmax_samples[i] = p[1]
                     # compute rocky planet mass loss timescale
-                    p = phev.compute_tmdot(self.planet_rocky.Xenvmax_samples[i],
-                                           *args)
-                    self.planet_rocky.tmdotmax_samples[i] = p[0]
-                    self.planet_rocky.depthenvmax_samples[i] = p[1]
+                    ## TEMP
+                    ##p = phev.compute_tmdot(self.planet_rocky.Xenvmax_samples[i], *args)
+                    ##self.planet_rocky.tmdotmax_samples[i] = p[0]
+                    ##self.planet_rocky.depthenvmax_samples[i] = p[1]
+                    eta = phev.compute_mass_loss_efficiency(mpi_rock, rpi_rock)
+                    sma = Msi**(1/3) * (Pi_rock/365.25)**(2/3)
+                    tmdot = self.planet_rocky.Xenvmax_samples[i] * mpi_rock**2 * AU2cm(sma)**2 * eta / Rearth2cm(rpi_rock)**3
+                    self.planet_rocky.tmdotmax_samples[i] = tmdot
+                    self.planet_rocky.depthenvmax_samples[i] = 1
                 
                 except (ValueError, AssertionError):
                     self.planet_rocky.Xenvmax_samples[i] = np.nan
@@ -254,6 +260,7 @@ class two_planet_system:
                 try:
                     vmin = self.planet_gaseous.Mcorerangemin_samples[i]
                     vmax = self.planet_gaseous.Mcorerangemax_samples[i]
+                    print(vmin, vmax, args)
                     Mgas_min = 10**brentq(phev._Mp_gas_to_solve, np.log10(vmin),
                                           np.log10(vmax), args=args)
                     self.planet_gaseous.Mmin_solution_samples[i] = Mgas_min
@@ -398,10 +405,10 @@ class star:
         assert self.Rssamples.size == self._Nsamp
         assert self.Teffsamples.size == self._Nsamp
         assert self.agesamples.size == self._Nsamp
-        
+
         self.mass = compute_point_estimates(self.Mssamples)
         self.radius = compute_point_estimates(self.Rssamples)
-        self.teff = compute_point_estimates(self.Teffsamples)
+        self.Teff = compute_point_estimates(self.Teffsamples)
         self.age = compute_point_estimates(self.agesamples)
 
         
@@ -454,7 +461,7 @@ class planet:
 
         # define planet mass if provided
         if np.all(mp != None):
-            self.mpsamples = np.repeat(mp, Nsamp) \
+            self.mpsamples = np.repeat(mp, self._Nsamp) \
                 if type(mp) in [int,float] else \
                    np.ascontiguousarray(mp)
             self.mass = compute_point_estimates(self.mpsamples)
@@ -481,7 +488,7 @@ class planet:
             np.sqrt(Rsun2cm(star.Rssamples) / (2*AU2cm(self.asamples)))
 
         self.a = compute_point_estimates(self.asamples)
-        self.teq = compute_point_estimates(self.Teqsamples)
+        self.Teq = compute_point_estimates(self.Teqsamples)
 
 
 
@@ -518,3 +525,19 @@ def close_progressbar(bar):
     dt = bar.seconds_elapsed
     print('Time elapsed = %.1f seconds (%.2f minutes).'%(dt,dt/60))
     bar.finish()
+
+
+
+
+if __name__ == '__main__':
+    # debug Kep-36 case
+    import pdb
+    import radvalley_definitions as rvdef
+    
+    tps = two_planet_system(rvdef.define_radval_simple) 
+    tps.add_star(1.071, 1.626, 5911) 
+    tps.add_planet(13.84, 1.49, 4.45, 1/3) 
+    tps.add_planet(16.24, 3.67, 8.08, 1/3)
+
+    pdb.set_trace()
+    tps.compute_Mgas_min_photoevaporation(value_errors=False, size=1)
