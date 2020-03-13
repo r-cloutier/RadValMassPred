@@ -2,27 +2,41 @@ from imports import *
 import planetary_structure as ps            
 
 
-def compute_Xmax_rock(P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
+def compute_Xmax_rock(Rp, P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
     '''
     Solve for the envelope mass fraction of the rocky planet that maximizes its
     mass loss timescale given the planetary parameters.
     '''
     # maximize the rocky planet's mass loss timescale
     args = P, Ms, Mcore, Teq, Tkh, Xiron, Xice
-    Xenv_max = fsolve(_tmdot_to_maximize, .01, args=args)
-    return float(Xenv_max)
+    #TEMPXenv_max = float(fsolve(_tmdot_to_maximizeOLD, .01, args=args))
+    
+    args = Mcore, Teq, Tkh, Xiron, Xice
+    DRmin, DRmax = .1*Rp, 5*Rp
+    res = minimize_scalar(_tmdot_to_maximize, bounds=(DRmin,DRmax), args=args, method='bounded')
+    DRmax = float(res.x)
+    Xenv_max = ps.compute_Xenv(DRmax, *args)
+
+    return Xenv_max
 
 
 
-def compute_Xmax_gas(P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
+def compute_Xmax_gas(Rp, P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
     '''
     Solve for the envelope mass fraction of the gaseous planet that maximizes 
     its mass loss timescale given the planetary parameters.
     '''
     # maximize the rocky planet's mass loss timescale
     args = P, Ms, Mcore, Teq, Tkh, Xiron, Xice
-    Xenv_max = fsolve(_tmdot_to_maximize, .01, args=args)
-    return float(Xenv_max)
+    #TEMPXenv_max = fsolve(_tmdot_to_maximize, .01, args=args)
+   
+    args = Mcore, Teq, Tkh, Xiron, Xice
+    DRmin, DRmax = .1*Rp, 5*Rp
+    res = minimize_scalar(_tmdot_to_maximize, bounds=(DRmin,DRmax), args=args, method='bounded')
+    DRmax = float(res.x)
+    Xenv_max = ps.compute_Xenv(DRmax, *args)
+
+    return Xenv_max
 
 
 
@@ -30,9 +44,24 @@ def compute_Mcore_min_no_self_gravity(Xenv_min, P, Ms, Teq, Tkh, Xiron, Xice):
     '''Compute the minimum core mass required for Xenv to be < 1 such that 
     atmospheric self gravity can be ignored.'''
     args = Xenv_min, P, Ms, Teq, Tkh, Xiron, Xice
-    Mcore_min = fsolve(_Mcore_to_minimize, .01, args=args)
+    ##TEMPMcore_min = fsolve(_Mcore_to_minimize, .01, args=args)
+    Mcmin, Mcmax = .01, 100
+    res = minimize_scalar(_Mcore_to_minimize, bounds=(Mcmin,Mcmax), args=args, method='bounded')
+    Mcore_min = res.x
     return float(Mcore_min)
 
+
+def compute_Mcore_max(Rp_now, Teq, age, Xiron, Xice):
+    '''Compute the maximum core mass assuming no envelope (i.e. Rp==Rcore) that 
+    still has a radius structure solution.'''
+    Mcore_test = ps.solidradius2mass(Rp_now, Xiron, Xice)
+    while Mcore_test > 0:
+        try:
+            _=ps.Rp_solver_gas(Rp_now, Mcore_test, Teq, age, Xiron, Xice)
+            return float(Mcore_test)
+        except (ValueError, AssertionError):
+            Mcore_test *= .99
+            continue
     
 
 def compute_tmdot(Xenv, P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
@@ -61,9 +90,9 @@ def compute_tmdot(Xenv, P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
    
     # this is the expression in EvapMass which I think has the wrong scaling with eta
     # verbatim from mass_loss.tmdot_rocky:tmdot = X * Mcore**2. * sep_cm**2. * eff / Rplanet**3.
-    #sma = Ms**(1/3) * (P/365.25)**(2/3)
-    #tmdot = Xenv * Mcore**2 * sma**2 * eta / Rp_full
- 
+    sma = Ms**(1/3) * (P/365.25)**(2/3)
+    tmdot = Xenv * Mcore**2 * AU2cm(sma)**2 * eta / Rearth2cm(Rp_full)**3
+
     return tmdot, depth_env
 
 
@@ -77,6 +106,7 @@ def _Mp_gas_to_solve(lg_Mcore, P, Ms, Teq, Tkh, Xiron, Xice, Rp_now, age,
     '''
     # evaluate the current envelope mass fraction
     Mcore = 10**lg_Mcore
+    ##TEMPpdb.set_trace()
     try:
         Xenv, Rp_full = ps.Rp_solver_gas(Rp_now, Mcore, Teq, age, Xiron, Xice)
     except ValueError:
@@ -119,7 +149,7 @@ def compute_mass_loss_efficiency(Mp, Rp):
 
 
 
-def _tmdot_to_maximize(Xenv, P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
+def _tmdot_to_maximizeOLD(Xenv, P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
     '''
     Function to compute the maximum mass loss time equal to when 
     Delta_R / Rcore == 1.
@@ -131,10 +161,17 @@ def _tmdot_to_maximize(Xenv, P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
     return depth_env - 1
     
 
+def _tmdot_to_maximize(DRrcb, Mcore, Teq, Tkh, Xiron, Xice):
+    Xenv = ps.compute_Xenv(DRrcb, Mcore, Teq, Tkh, Xiron, Xice)
+    _,Rp_full,_ = ps.solve_radius_structure(Xenv, Mcore, Teq, Tkh, Xiron, Xice)
+    eta = compute_mass_loss_efficiency(Mcore, Rp_full)
+    func_to_min = Rearth2cm(Rp_full)**3 / (Xenv*eta)   # shouldnt eta be in the numerator? apparently not because it fails if it is
+    return func_to_min
 
-def _Mcore_to_minimize(Mcore, Xenv_min, P, Ms, Teq, Tkh, Xiron, Xice):
+
+def _Mcore_to_minimizeOLD(Mcore, Xenv_min, P, Ms, Teq, Tkh, Xiron, Xice):
     '''
-    Function to find the minimum gaseous planet mas for which Xenv < 1.
+    Function to find the minimum gaseous planet mass for which Xenv < 1.
     '''
     # compute mass loss timescale from the envelope depth
     _,depth_env = compute_tmdot(Xenv_min, P, Ms, Mcore, Teq, Tkh, Xiron, Xice)
@@ -142,3 +179,9 @@ def _Mcore_to_minimize(Mcore, Xenv_min, P, Ms, Teq, Tkh, Xiron, Xice):
     # tmdot is maximized where depth_env equals one
     return depth_env - 1
 
+
+def _Mcore_to_minimize(Mcore, Xenv_min, P, Ms, Teq, Tkh, Xiron, Xice):
+    _,Rp_full,_ = ps.solve_radius_structure(Xenv_min, Mcore, Teq, Tkh, Xiron, Xice)
+    eta = compute_mass_loss_efficiency(Mcore, Rp_full)
+    func_to_min = Rearth2cm(Rp_full)**3 / (Xenv_min*eta)   # shouldnt eta be in the numerator? apparently not because it fails if it is
+    return func_to_min

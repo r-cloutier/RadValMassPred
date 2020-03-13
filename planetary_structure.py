@@ -165,12 +165,28 @@ def compute_Xenv(DRrcb, Mcore, Teq, Tkh, Xiron, Xice):
     RHS *= I2
     RHS /= Mearth2g(Mcore)
     Xenv = float(RHS**(1/(1+1/(1+alpha))))
-    
+   
+    # version from EvapMass TEMP
+    #LHS = 3.*(Rrcb/Rcore)**3.*(rho_rcb_without_X_term/rho_core)*\
+    #(grad_ab * (G * Mearth2g(Mcore))/(cs2 * Rearth2cm(Rrcb)))**(1./(gamma-1.))*I2
+    #Xenv = LHS**(1./(1.+1./(1.+alpha)))
+ 
     return Xenv
 
 
+def compute_Xenv_rad(Rp, Mcore, Teq, Tkh_Myr, Xiron, Xice):
+    '''copied from EvapMass for comparison'''
+    Pressure_phot = (2./3. * (G*Mearth2g(Mcore)/(Rearth2cm(Rp)**2.*kappa0*Teq**beta)))**(1./(1.+alpha))
+    rho_phot_calc = (mu/Kb) * Pressure_phot / Teq
+    H = cm2Rearth(Kb * Teq * Rearth2cm(Rp) ** 2. / ( mu * G * Mearth2g(Mcore)))
+    Rcore = mass2solidradius(Mcore, Xiron, Xice)
+    rho_base = rho_phot_calc * np.exp(Rp/H*(Rp/Rcore-1.))
+    Menv = 4.*np.pi*Rearth2cm(Rcore)**2.*Rearth2cm(H)*rho_base
+    X = Menv/Mearth2g(Mcore)
+    return X#, Rp/Rcore, Rp
 
-def compute_Xenv_rad(Rp, Mcore, Teq, age_Myr, Xiron, Xice):
+
+def compute_Xenv_radOLD(Rp, Mcore, Teq, age_Myr, Xiron, Xice):
     '''
     Compute the envelope mass fraction in a fully radiative layer. This should
     only be used when the radius solver finds an rcb that is shallower than 
@@ -232,9 +248,10 @@ def Rp_solver_gas(Rp_now, Mcore, Teq, age_Myr, Xiron, Xice):
 
     if (DRrcb < H):  # i.e. no convective zone
         Xenv = compute_Xenv_rad(Rp_now, Mcore, Teq, age_Myr, Xiron, Xice)
-        _,Rp_full,_ = solve_radius_structure(Xenv, Mcore, Teq, age_Myr,
-                                             Xiron, Xice)
-        
+        #_,Rp_full,_ = solve_radius_structure(Xenv, Mcore, Teq, age_Myr,
+        #                                     Xiron, Xice)
+        Rp_full = float(np.copy(Rp_now))
+
     else:
         Xenv = compute_Xenv(DRrcb, Mcore, Teq, age_Myr, Xiron, Xice)
         _,Rp_full,_ = solve_radius_structure(Xenv, Mcore, Teq, age_Myr,

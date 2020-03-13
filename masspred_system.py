@@ -150,7 +150,7 @@ class two_planet_system:
                 try:
                     # solve for maximum tmdot
                     self.planet_rocky.Xenvmax_samples[i] = \
-                        phev.compute_Xmax_rock(*args)
+                        phev.compute_Xmax_rock(rpi_rock, *args)
                     # get planet structure
                     p=ps.solve_radius_structure(self.planet_rocky.Xenvmax_samples[i],
                                                 *args[2:])
@@ -161,12 +161,12 @@ class two_planet_system:
                     ##p = phev.compute_tmdot(self.planet_rocky.Xenvmax_samples[i], *args)
                     ##self.planet_rocky.tmdotmax_samples[i] = p[0]
                     ##self.planet_rocky.depthenvmax_samples[i] = p[1]
-                    eta = phev.compute_mass_loss_efficiency(mpi_rock, rpi_rock)
+                    eta = phev.compute_mass_loss_efficiency(mpi_rock, self.planet_rocky.Rpfullmax_samples[i])
                     sma = Msi**(1/3) * (Pi_rock/365.25)**(2/3)
-                    tmdot = self.planet_rocky.Xenvmax_samples[i] * mpi_rock**2 * AU2cm(sma)**2 * eta / Rearth2cm(rpi_rock)**3
+                    tmdot = self.planet_rocky.Xenvmax_samples[i] * mpi_rock**2 * AU2cm(sma)**2 * eta / Rearth2cm(self.planet_rocky.Rpfullmax_samples[i])**3
                     self.planet_rocky.tmdotmax_samples[i] = tmdot
                     self.planet_rocky.depthenvmax_samples[i] = 1
-                
+
                 except (ValueError, AssertionError):
                     self.planet_rocky.Xenvmax_samples[i] = np.nan
                     self.planet_rocky.Rrcbmax_samples[i] = np.nan
@@ -198,7 +198,7 @@ class two_planet_system:
 
                 if value_errors:
                     self.planet_gaseous.Xenvmax_samples[i] = \
-                        phev.compute_Xmax_gas(*tuple(args))
+                        phev.compute_Xmax_gas(rpi_gas, *tuple(args))
                     # get planet structure
                     p=ps.solve_radius_structure(self.planet_gaseous.Xenvmax_samples[i],
                                                 *args[2:])
@@ -213,17 +213,22 @@ class two_planet_system:
                 else:
                     try:
                         self.planet_gaseous.Xenvmax_samples[i] = \
-                            phev.compute_Xmax_gas(*tuple(args))
+                            phev.compute_Xmax_gas(rpi_gas, *tuple(args))
                         # get planet structure
                         p=ps.solve_radius_structure(self.planet_gaseous.Xenvmax_samples[i],
                                                     *args[2:])
                         self.planet_gaseous.Rrcbmax_samples[i] = p[0]
                         self.planet_gaseous.Rpfullmax_samples[i] = p[1]
                         # compute gaseous planet mass loss timescale
-                        p = phev.compute_tmdot(self.planet_gaseous.Xenvmax_samples[i],
-                                               *tuple(args))
-                        self.planet_gaseous.tmdotmax_samples[i] = p[0]
-                        self.planet_gaseous.depthenvmax_samples[i] = p[1]
+                        #p = phev.compute_tmdot(self.planet_gaseous.Xenvmax_samples[i],
+                        #                       *tuple(args))
+                        #self.planet_gaseous.tmdotmax_samples[i] = p[0]
+                        #self.planet_gaseous.depthenvmax_samples[i] = p[1]
+                        eta = phev.compute_mass_loss_efficiency(mpi_rock, self.planet_gaseous.Rpfullmax_samples[i])
+                        sma = Msi**(1/3) * (Pi_gas/365.25)**(2/3)
+                        tmdot = self.planet_gaseous.Xenvmax_samples[i] * mpi_gas**2 * AU2cm(sma)**2 * eta / Rearth2cm(self.planet_gaseous.Rpfullmax_samples[i])**3
+                        self.planet_gaseous.tmdotmax_samples[i] = tmdot
+                        self.planet_gaseous.depthenvmax_samples[i] = 1
 
                     except (ValueError, AssertionError):
                         self.planet_gaseous.Xenvmax_samples[i] = np.nan
@@ -243,9 +248,11 @@ class two_planet_system:
             # just solved for minimum gaseous core mass to have a longer mass loss
             # time than the rocky planet
             # set maximum gaseous core mass for a pure iron ball
-            self.planet_gaseous.Mcorerangemax_samples[i] = \
-                ps.solidradius2mass(rpi_gas, Xironi_gas, 0)
-            
+            self.planet_gaseous.Mcorerangemax_samples[i] = 100#\
+            #    ps.solidradius2mass(rpi_gas, Xironi_gas, 0)
+            #self.planet_gaseous.Mcorerangemax_samples[i] = \
+            #    phev.compute_Mcore_max(rpi_gas, Teqi_gas, agei, Xironi_gas, Xicei_gas)
+
             # solve for the minimum gaseous planet mass
             args = Pi_gas, Msi, Teqi_gas, Tkhi_gas, Xironi_gas, Xicei_gas, rpi_gas, \
                 agei, self.planet_rocky.tmdotmax_samples[i]
@@ -260,7 +267,6 @@ class two_planet_system:
                 try:
                     vmin = self.planet_gaseous.Mcorerangemin_samples[i]
                     vmax = self.planet_gaseous.Mcorerangemax_samples[i]
-                    print(vmin, vmax, args)
                     Mgas_min = 10**brentq(phev._Mp_gas_to_solve, np.log10(vmin),
                                           np.log10(vmax), args=args)
                     self.planet_gaseous.Mmin_solution_samples[i] = Mgas_min
@@ -531,13 +537,11 @@ def close_progressbar(bar):
 
 if __name__ == '__main__':
     # debug Kep-36 case
-    import pdb
     import radvalley_definitions as rvdef
     
     tps = two_planet_system(rvdef.define_radval_simple) 
-    tps.add_star(1.071, 1.626, 5911) 
-    tps.add_planet(13.84, 1.49, 4.45, 1/3) 
-    tps.add_planet(16.24, 3.67, 8.08, 1/3)
+    tps.add_star(1.071, 1.626, 5911, 6800) 
+    tps.add_planet(13.84, 1.49, 4.45, 1/3, albedo=0) 
+    tps.add_planet(16.24, 3.67, 8.08, 1/3, albedo=0)
 
-    pdb.set_trace()
     tps.compute_Mgas_min_photoevaporation(value_errors=False, size=1)
