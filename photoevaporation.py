@@ -58,7 +58,12 @@ def compute_tmdot(Xenv, P, Ms, Mcore, Teq, Tkh, Xiron, Xice):
     tmdot *= (Mcore/5)**1.42
     a = 1.57 if depth_env < 1 else -1.69
     tmdot *= depth_env**a
-    
+   
+    # this is the expression in EvapMass which I think has the wrong scaling with eta
+    # verbatim from mass_loss.tmdot_rocky:tmdot = X * Mcore**2. * sep_cm**2. * eff / Rplanet**3.
+    sma = Ms**(1/3) * (P/365.25)**(2/3)
+    tmdot = Xenv * Mcore**2 * sma**2 * eta / Rp_full)
+ 
     return tmdot, depth_env
 
 
