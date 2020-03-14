@@ -1,6 +1,7 @@
 from imports import *
 import planetary_structure as ps
 import photoevaporation as phev
+import corepoweredmassloss as cpml
 
 
 class two_planet_system:
