@@ -77,15 +77,14 @@ def _tmdot_to_maximize(lg_Xenv, Mcore, Teq, Tkh, Xiron, Xice):
     # solve for mass loss timescale in the applicable mass loss regime
     tmdot = compute_tmdot(10**lg_Xenv, Mcore, Teq, Tkh, Xiron, Xice)
     return 1/tmdot 
-    
 
 
-def compute_Xmax_rock(Mcore, Teq, Tkh, Xiron, Xice):
+def compute_Xmax(Mcore, Teq, Tkh, Xiron, Xice):
     '''
-    Solve for the envelope mass fraction of the rocky planet that maximizes its
-    mass loss timescale given the planetary parameters.
+    Solve for the envelope mass fraction, of either the rocky or gaseous planet,
+    that maximizes its mass loss timescale given the planetary parameters.
     '''
-    # maximize the rocky planet's mass loss timescale
+    # maximize the planet's mass loss timescale
     args = Mcore, Teq, Tkh, Xiron, Xice
     res = minimize_scalar(_tmdot_to_maximize, bounds=(-8,0), args=args,
                           method='bounded')
@@ -93,9 +92,20 @@ def compute_Xmax_rock(Mcore, Teq, Tkh, Xiron, Xice):
         Xenv_max = float(10**res.x)
         return Xenv_max
     else:
-        raise ValueError('Cannot solve for rocky planet envelope mass fraction that maximizes its mass loss timescale.')
+        raise ValueError("Cannot solve for the envelope mass fraction that maximizes gthe planet's mass loss timescale.")
 
-    
+
+
+#def compute_Mcore_min_no_self_gravity(Rp_now, Teq, age, Xiron, Xice):
+#    '''Compute the minimum core mass required for the envelope to be non-self 
+#    gravitating (i.e. Xenv = 1).'''
+#    args = Rp_now, Teq, age, Xiron, Xice
+#    Mcore_min = 10**fsolve(_Mcore_to_minimize, -1, args=args)
+#    return Mcore_min
+#def _Mcore_to_minimize(lg_Mcore, Rp_now, Teq, age, Xiron, Xice):
+#    Mcore = 10**float(lg_Mcore)
+#    Xenv,_ = ps.Rp_solver_gas(Rp_now, Mcore, Teq, age, Xiron, Xice)
+#    return Xenv - 1
 
 
 def _Mp_gas_to_solve(lg_Mcore, Teq, Xiron, Xice, Rp_now, age, tmdot_rocky):

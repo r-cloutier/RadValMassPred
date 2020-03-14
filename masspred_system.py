@@ -80,7 +80,7 @@ class two_planet_system:
 
 
         
-   def compute_Mgas_min_corepoweredmassloss(self, value_errors=True, size=1):
+    def compute_Mgas_min_corepoweredmassloss(self, value_errors=True, size=1):
         '''
         Compute the minimum mass of the gaseous planet in order to be 
         consistent with the core-powered mass loss scenerio. 
@@ -219,13 +219,14 @@ class photoevaporation:
         self.star = copy.copy(tps.star)
         self.planet_rocky = copy.copy(tps.planet_rocky)
         self.planet_gaseous = copy.copy(tps.planet_gaseous)
+        #self = copy.copy(tps)
         
         # run the minimum mass calculation
         kwargs = {'value_errors': value_errors, 'size':size}
-        self.compute_Mgas_min_photoevaporation(tps, **kwargs)
+        self._compute_Mgas_min_photoevaporation(tps, **kwargs)
         
 
-    def compute_Mgas_min_photoevaporation(self, tps, value_errors=True, size=1):
+    def _compute_Mgas_min_photoevaporation(self, tps, value_errors=True, size=1):
         '''
         Compute the minimum mass of the gaseous planet in order to be 
         consistent with the photoevaporation scenerio. 
@@ -264,7 +265,7 @@ class photoevaporation:
 
 
         # Monte-Carlo sample over parameters to get distribution of solutions 
-        progress_bar = initialize_progressbar(N, "\nComputing the gaseous planet's minimum mass (%i realizations)\n"%N)
+        progress_bar = initialize_progressbar(N, "\nComputing the gaseous planet's minimum mass under photoevaporation (%i realizations)\n"%N)
         for i in range(N):
 
             progress_bar.update(i+1)
@@ -553,10 +554,10 @@ class corepoweredmassloss:
         
         # run the minimum mass calculation
         kwargs = {'value_errors': value_errors, 'size':size}
-        self.compute_Mgas_min_corepoweredmassloss(tps, **kwargs)
-        
+        self._compute_Mgas_min_corepoweredmassloss(tps, **kwargs)
 
-    def compute_Mgas_min_corepoweredmassloss(self, tps, value_errors=True, size=1):
+
+    def _compute_Mgas_min_corepoweredmassloss(self, tps, value_errors=True, size=1):
         '''
         Compute the minimum mass of the gaseous planet in order to be 
         consistent with the core-powered mass loss scenerio. 
@@ -566,11 +567,267 @@ class corepoweredmassloss:
         envelope) to the minimum mass loss timescale for the gaseous planet.
         '''
         assert tps._is_complete  # system is setup for calculations
-        **CONTINUE HERE**
+
+        # sample gaseous planet minimum masses
+        N = int(size)
+        self.planet_gaseous.Mmin_solution_samples = np.zeros(N)
+        self.planet_gaseous.Xenv_solution_samples = np.zeros(N)
+        self.planet_gaseous.Rcore_solution_samples = np.zeros(N)
+        self.planet_gaseous.Rrcb_solution_samples = np.zeros(N)
+        self.planet_gaseous.Rpfull_solution_samples = np.zeros(N)
+        self.planet_gaseous.tmdot_solution_samples = np.zeros(N)
+        self.planet_gaseous.is_consistent_corepoweredmassloss  = np.zeros(N)
+        
+        self.planet_gaseous.Mcorerangemin_samples = np.zeros(N)
+        self.planet_gaseous.Mcorerangemax_samples = np.zeros(N)
+        self.planet_gaseous.Xenvmax_samples = np.zeros(N)
+        self.planet_gaseous.Rcoremax_samples = np.zeros(N)        
+        self.planet_gaseous.Rrcbmax_samples = np.zeros(N)
+        self.planet_gaseous.Rpfullmax_samples = np.zeros(N)
+        self.planet_gaseous.tmdotmax_samples = np.zeros(N)
+        
+        self.planet_rocky.Xenvmax_samples = np.zeros(N)
+        self.planet_rocky.Rcore_samples = np.zeros(N)
+        self.planet_rocky.Rrcbmax_samples = np.zeros(N)
+        self.planet_rocky.Rpfullmax_samples = np.zeros(N)
+        self.planet_rocky.tmdotmax_samples = np.zeros(N)
+
+        # Monte-Carlo sample over parameters to get distribution of solutions 
+        progress_bar = initialize_progressbar(N, "\nComputing the gaseous planet's minimum mass under core-powered mass loss (%i realizations)\n"%N)
+        for i in range(N):
+
+            progress_bar.update(i+1)
+
+            # sample values for this realization
+            Msi = sample(self.star.Mssamples)
+            agei = sample(self.star.agesamples)
+            Pi_rock = sample(self.planet_rocky.Psamples)
+            rpi_rock = sample(self.planet_rocky.rpsamples)
+            mpi_rock = sample(self.planet_rocky.mpsamples)
+            Teqi_rock = sample(self.planet_rocky.Teqsamples)
+            Tkhi_rock = sample(self.planet_rocky.Tkhsamples)
+            Xironi_rock = sample(self.planet_rocky.Xironsamples)
+            Xicei_rock = sample(self.planet_rocky.Xicesamples)
+            Pi_gas = sample(self.planet_gaseous.Psamples)
+            rpi_gas = sample(self.planet_gaseous.rpsamples)
+            mpi_gas = sample(self.planet_gaseous.mpsamples)
+            Teqi_gas = sample(self.planet_gaseous.Teqsamples)
+            Tkhi_gas = sample(self.planet_gaseous.Tkhsamples)
+            Xironi_gas = sample(self.planet_gaseous.Xironsamples)
+            Xicei_gas = sample(self.planet_gaseous.Xicesamples)
+            
+            # solve for Xenv that maximizes the rocky planet mass loss timescale
+            args = mpi_rock, Teqi_rock, Tkhi_rock, Xironi_rock, Xicei_rock
+
+            # compute the rocky planet core radius
+            self.planet_rocky.Rcore_samples[i] = ps.mass2solidradius(args[0], *args[3:])
+            
+            if value_errors:
+                # solve for maximum tmdot
+                self.planet_rocky.Xenvmax_samples[i] = cpml.compute_Xmax(*args)
+                # get planet structure
+                p = ps.solve_radius_structure(self.planet_rocky.Xenvmax_samples[i], *args)
+                self.planet_rocky.Rrcbmax_samples[i] = p[0]
+                self.planet_rocky.Rpfullmax_samples[i] = p[1]
+                # compute rocky planet mass loss timescale
+                self.planet_rocky.tmdotmax_samples[i] = \
+                    cpml.compute_tmdot(self.planet_rocky.Xenvmax_samples[i], *args)
+    
+            else:
+                try:
+                    # solve for maximum tmdot
+                    self.planet_rocky.Xenvmax_samples[i] = cpml.compute_Xmax(*args)
+                    # get planet structure
+                    p=ps.solve_radius_structure(self.planet_rocky.Xenvmax_samples[i],*args)
+                    self.planet_rocky.Rrcbmax_samples[i] = p[0]
+                    self.planet_rocky.Rpfullmax_samples[i] = p[1]
+                    # compute rocky planet mass loss timescale
+                    self.planet_rocky.tmdotmax_samples[i] = \
+                        cpml.compute_tmdot(self.planet_rocky.Xenvmax_samples[i], *args)
+
+                except (ValueError, AssertionError):
+                    self.planet_rocky.Xenvmax_samples[i] = np.nan
+                    self.planet_rocky.Rrcbmax_samples[i] = np.nan
+                    self.planet_rocky.Rpfullmax_samples[i] = np.nan
+                    self.planet_rocky.tmdotmax_samples[i] = np.nan
 
 
+            # check that a solution exists
+            # get minimum gaseous core mass such that the gaseous planet's maximum
+            # tmdot > rocky planet's maximum tmdot
+            # i.e. increase minimum gas planet core mass until its maxmimum tmdot
+            # exceeds that of the rocky planet
+            Mcore_gas_min = .1
+            self.planet_gaseous.Mcorerangemin_samples[i] = np.copy(Mcore_gas_min)
+            Mcore_gas_min /= 1.1
+            args = [Mcore_gas_min, Teqi_gas, Tkhi_gas, Xironi_gas, Xicei_gas]
+            self.planet_gaseous.tmdotmax_samples[i] = 0
+
+            while (self.planet_gaseous.tmdotmax_samples[i] < self.planet_rocky.tmdotmax_samples[i]) & (Mcore_gas_min < self.planet_gaseous.mass[0]):
+                
+                # increase minimum gas planet core mass
+                Mcore_gas_min *= 1.1
+                args[0] = Mcore_gas_min
+
+                if value_errors:
+                    self.planet_gaseous.Xenvmax_samples[i]= cpml.compute_Xmax(*tuple(args))
+                    # get planet structure
+                    p=ps.solve_radius_structure(self.planet_gaseous.Xenvmax_samples[i],
+                                                *tuple(args))
+                    self.planet_gaseous.Rrcbmax_samples[i] = p[0]
+                    self.planet_gaseous.Rpfullmax_samples[i] = p[1]
+                    # compute gaseous planet mass loss timescale
+                    self.planet_gaseous.tmdotmax_samples[i] = cpml.compute_tmdot(self.planet_gaseous.Xenvmax_samples[i], *tuple(args))
+                
+                else:
+                    try:
+                        self.planet_gaseous.Xenvmax_samples[i] = \
+                            cpml.compute_Xmax(*tuple(args))
+                        # get planet structure
+                        p=ps.solve_radius_structure(self.planet_gaseous.Xenvmax_samples[i],
+                                                    *tuple(args))
+                        self.planet_gaseous.Rrcbmax_samples[i] = p[0]
+                        self.planet_gaseous.Rpfullmax_samples[i] = p[1]
+                        self.planet_gaseous.tmdotmax_samples[i] = cpml.compute_tmdot(self.planet_gaseous.Xenvmax_samples[i], *tuple(args))
+
+                    except (ValueError, AssertionError):
+                        self.planet_gaseous.Xenvmax_samples[i] = np.nan
+                        self.planet_gaseous.Rrcbmax_samples[i] = np.nan
+                        self.planet_gaseous.Rpfullmax_samples[i] = np.nan
+                        self.planet_gaseous.tmdotmax_samples[i] = np.nan
+                        
+     
+            # ensure that a solution exists
+            if (self.planet_gaseous.tmdotmax_samples[i] < self.planet_rocky.tmdotmax_samples[i]) | (self.planet_gaseous.Mcorerangemin_samples[i] > mpi_gas):
+                raise ValueError("No solution exists because the gaseous planet's maximum mass loss timescale is less than the rocky planet's maximum mass loss timescale.")
+            else:
+                self.planet_gaseous.Mcorerangemin_samples[i] = Mcore_gas_min
 
 
+            # just solved for minimum gaseous core mass to have a longer mass loss
+            # time than the rocky planet
+            # set maximum gaseous core mass
+            self.planet_gaseous.Mcorerangemax_samples[i] = 100
+            
+            # solve for the minimum gaseous planet mass
+            args = Teqi_gas, Xironi_gas, Xicei_gas, rpi_gas, agei, \
+                self.planet_rocky.tmdotmax_samples[i]
+            vmin = self.planet_gaseous.Mcorerangemin_samples[i]
+            vmax = self.planet_gaseous.Mcorerangemax_samples[i]
+
+            if value_errors:
+                Mgas_min = 10**brentq(cpml._Mp_gas_to_solve, np.log10(vmin),
+                                      np.log10(vmax), args=args)
+                self.planet_gaseous.Mmin_solution_samples[i] = Mgas_min
+
+            else:
+                try:
+                    Mgas_min = 10**brentq(cpml._Mp_gas_to_solve, np.log10(vmin),
+                                          np.log10(vmax), args=args)
+                    self.planet_gaseous.Mmin_solution_samples[i] = Mgas_min
+
+                except (ValueError, AssertionError):
+                    self.planet_gaseous.Mmin_solution_samples[i] = np.nan
+
+                    
+            # solve for the envelope mass fraction and planet structure
+            # given the minimum mass
+            args = rpi_gas, self.planet_gaseous.Mmin_solution_samples[i], Teqi_gas, agei, \
+                Xironi_gas, Xicei_gas
+            
+            if value_errors:
+                # get Xenv
+                p1 = ps.Rp_solver_gas(*args)
+                # solve radius structure
+                args = self.planet_gaseous.Xenv_solution_samples[i], \
+                    self.planet_gaseous.Mmin_solution_samples[i], \
+                    Teqi_gas, Tkhi_gas, Xironi_gas, Xicei_gas
+                p2 = ps.solve_radius_structure(*args)
+                p3 = cpml.compute_tmdot(self.planet_gaseous.Xenv_solution_samples[i],
+                                        self.planet_gaseous.Mmin_solution_samples[i],
+                                        Teqi_gas, Tkhi_gas, Xironi_gas, Xicei_gas)
+                
+            else:
+                try:
+                    # get Xenv
+                    p1 = ps.Rp_solver_gas(*args)
+                    # solve radius structure
+                    args = self.planet_gaseous.Xenv_solution_samples[i], \
+                        self.planet_gaseous.Mmin_solution_samples[i], \
+                        Teqi_gas, Tkhi_gas, Xironi_gas, Xicei_gas
+                    p2 = ps.solve_radius_structure(*args)
+                    p3 = cpml.compute_tmdot(self.planet_gaseous.Xenv_solution_samples[i],
+                                            self.planet_gaseous.Mmin_solution_samples[i],
+                                            Teqi_gas, Tkhi_gas, Xironi_gas, Xicei_gas)
+                except (ValueError, AssertionError):
+                    p1 = np.repeat(np.nan, 2)
+                    p2 = np.repeat(np.nan, 2)
+                    p3 = np.nan
+
+            # save solution results
+            self.planet_gaseous.Xenv_solution_samples[i] = p1[0]
+            self.planet_gaseous.Rcore_solution_samples[i] = \
+                ps.mass2solidradius(self.planet_gaseous.Mmin_solution_samples[i]/self.planet_gaseous.Xenv_solution_samples[i], Xironi_gas, Xicei_gas)
+            self.planet_gaseous.Rrcb_solution_samples[i] = p2[0]
+            self.planet_gaseous.Rpfull_solution_samples[i] = p2[1]
+            self.planet_gaseous.tmdot_solution_samples[i] = p3
+
+            # is the minimum mass consistent with the core-powered mass loss model?
+            if np.isfinite(self.planet_gaseous.Mmin_solution_samples[i]):
+                self.planet_gaseous.is_consistent_corepoweredmassloss[i] = \
+                    self.planet_gaseous.Mmin_solution_samples[i] < mpi_gas
+            else:
+                self.planet_gaseous.is_consistent_corepoweredmassloss[i] = np.nan
+                
+            # compute gaseous planet core radius
+            self.planet_gaseous.Rcoremax_samples[i] = \
+                ps.mass2solidradius(self.planet_gaseous.Mmin_solution_samples[i]/self.planet_gaseous.Xenvmax_samples[i], *args[-2:])
+            self.planet_gaseous.Rcore_solution_samples[i] = \
+                ps.mass2solidradius(self.planet_gaseous.Mmin_solution_samples[i]/self.planet_gaseous.Xenv_solution_samples[i], *args[-2:])
+
+        
+        close_progressbar(progress_bar)
+                    
+        # gather point estimates
+        self.planet_gaseous.Mmin_solution = \
+            compute_point_estimates(self.planet_gaseous.Mmin_solution_samples)
+        self.planet_gaseous.Xenv_solution = \
+            compute_point_estimates(self.planet_gaseous.Xenv_solution_samples)
+        self.planet_gaseous.Rcore_solution = \
+            compute_point_estimates(self.planet_gaseous.Rcore_solution_samples)
+        self.planet_gaseous.Rrcb_solution = \
+            compute_point_estimates(self.planet_gaseous.Rrcb_solution_samples)
+        self.planet_gaseous.Rpfull_solution = \
+            compute_point_estimates(self.planet_gaseous.Rpfull_solution_samples)
+        self.planet_gaseous.tmdot_solution = \
+            compute_point_estimates(self.planet_gaseous.tmdot_solution_samples)
+        g = np.isfinite(self.planet_gaseous.is_consistent_corepoweredmassloss)
+        self.planet_gaseous.frac_consistent_corepoweredmassloss = self.planet_gaseous.is_consistent_corepoweredmassloss[g].sum() / g.sum()
+        self.planet_gaseous.Mcorerangemin = \
+            compute_point_estimates(self.planet_gaseous.Mcorerangemin_samples)
+        self.planet_gaseous.Mcorerangemax = \
+            compute_point_estimates(self.planet_gaseous.Mcorerangemax_samples)
+        self.planet_gaseous.Xenvmax = \
+            compute_point_estimates(self.planet_gaseous.Xenvmax_samples)
+        self.planet_gaseous.Rcoremax = \
+            compute_point_estimates(self.planet_gaseous.Rcoremax_samples)
+        self.planet_gaseous.Rrcbmax = \
+            compute_point_estimates(self.planet_gaseous.Rrcbmax_samples)
+        self.planet_gaseous.Rpfullmax = \
+            compute_point_estimates(self.planet_gaseous.Rpfullmax_samples)
+        self.planet_gaseous.tmdotmax = \
+            compute_point_estimates(self.planet_gaseous.tmdotmax_samples)
+        self.planet_rocky.Xenvmax = \
+            compute_point_estimates(self.planet_rocky.Xenvmax_samples)
+        self.planet_rocky.Rcore = \
+            compute_point_estimates(self.planet_rocky.Rcore_samples)
+        self.planet_rocky.Rrcbmax = \
+            compute_point_estimates(self.planet_rocky.Rrcbmax_samples)
+        self.planet_rocky.Rpfullmax = \
+            compute_point_estimates(self.planet_rocky.Rpfullmax_samples)
+        self.planet_rocky.tmdotmax = \
+            compute_point_estimates(self.planet_rocky.tmdotmax_samples)
+        
 
         
 
@@ -603,22 +860,7 @@ def initialize_progressbar(N, message=None):
         return None
 
 
-    
 def close_progressbar(bar):
     dt = bar.seconds_elapsed
     print('Time elapsed = %.1f seconds (%.2f minutes).'%(dt,dt/60))
     bar.finish()
-
-
-
-
-if __name__ == '__main__':
-    # debug Kep-36 case
-    import radvalley_definitions as rvdef
-    
-    tps = two_planet_system(rvdef.define_radval_simple) 
-    tps.add_star(1.071, 1.626, 5911, 6800) 
-    tps.add_planet(13.84, 1.49, 4.45, 1/3, albedo=0) 
-    tps.add_planet(16.24, 3.67, 8.08, 1/3, albedo=0)
-
-    tps.compute_Mgas_min_photoevaporation(value_errors=False, size=1)
