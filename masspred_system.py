@@ -75,7 +75,166 @@ class two_planet_system:
         loss time of the rocky planet (i.e. it just lost its primordial H/He 
         envelope) to the minimum mass loss timescale for the gaseous planet.
         '''
-        assert self._is_complete  # system is setup for calculations
+        kwargs = {'value_errors': value_errors, 'size':size}
+        self.photoevaporation = photoevaporation(self, **kwargs) 
+
+
+        
+   def compute_Mgas_min_corepoweredmassloss(self, value_errors=True, size=1):
+        '''
+        Compute the minimum mass of the gaseous planet in order to be 
+        consistent with the core-powered mass loss scenerio. 
+
+        The minimum gaseous planet mass comes from equating the maximum mass 
+        loss time of the rocky planet (i.e. it just lost its primordial H/He 
+        envelope) to the minimum mass loss timescale for the gaseous planet.
+        '''
+        kwargs = {'value_errors': value_errors, 'size':size}
+        self.corepoweredmassloss = corepoweredmassloss(self, **kwargs)
+
+
+
+
+
+class star:
+
+    def __init__(self, label, Nsamp, Ms, Rs, Teff, age):
+        '''
+        Initialize the host star.
+        '''
+        self.label = label
+        self._Nsamp = int(Nsamp)
+        self._define_stellar_params(Ms, Rs, Teff, age)
+
+
+    def _define_stellar_params(self, Ms, Rs, Teff, age):
+        '''Define stellar parameter point estimates and uncertainties.'''
+        self.Mssamples = np.repeat(Ms, self._Nsamp) if type(Ms) in [int,float] else \
+               np.ascontiguousarray(Ms)
+        self.Rssamples = np.repeat(Rs, self._Nsamp) if type(Rs) in [int,float] else \
+               np.ascontiguousarray(Rs)
+        self.Teffsamples = np.repeat(Teff, self._Nsamp) \
+            if type(Teff) in [int,float] else \
+               np.ascontiguousarray(Teff)
+        self.agesamples = np.repeat(age, self._Nsamp) \
+            if type(age) in [int,float] else \
+               np.ascontiguousarray(age)
+
+        assert self.Mssamples.size == self._Nsamp
+        assert self.Rssamples.size == self._Nsamp
+        assert self.Teffsamples.size == self._Nsamp
+        assert self.agesamples.size == self._Nsamp
+
+        self.mass = compute_point_estimates(self.Mssamples)
+        self.radius = compute_point_estimates(self.Rssamples)
+        self.Teff = compute_point_estimates(self.Teffsamples)
+        self.age = compute_point_estimates(self.agesamples)
+
+        
+
+
+class planet:
+
+    def __init__(self, label, Nsamp, P, rp, mp, Xiron, Xice, Tkh,
+                 radius_transition, albedo):
+        '''
+        Initialize one planet. 
+        '''
+        self.label = label
+        self._Nsamp = int(Nsamp)
+        self._radius_transition = float(radius_transition)
+        self.albedo = float(albedo)
+        self._define_planetary_params(P, rp, mp, Xiron, Xice, Tkh)
+
+        
+
+    def _define_planetary_params(self, P, rp, mp, Xiron, Xice, Tkh):
+        self.Psamples = np.repeat(P, self._Nsamp) if type(P) in [int,float] else \
+               np.ascontiguousarray(P)
+        self.rpsamples = np.repeat(rp, self._Nsamp) if type(rp) in [int,float] else \
+               np.ascontiguousarray(rp)
+        self.Xironsamples = np.repeat(Xiron, self._Nsamp) \
+            if type(Xiron) in [int,float] else \
+               np.ascontiguousarray(Xiron)
+        assert np.all(self.Xironsamples >= 0) & np.all(self.Xironsamples <= 1)
+        self.Xicesamples = np.repeat(Xice, self._Nsamp) \
+            if type(Xice) in [int,float] else \
+               np.ascontiguousarray(Xice)
+        assert np.all(self.Xicesamples >= 0) & np.all(self.Xicesamples <= 1)
+        self.Tkhsamples = np.repeat(Tkh, self._Nsamp) \
+            if type(Tkh) in [int,float] else \
+               np.ascontiguousarray(Tkh)
+
+        assert self.Psamples.size == self._Nsamp
+        assert self.rpsamples.size == self._Nsamp
+        assert self.Xironsamples.size == self._Nsamp
+        assert self.Xicesamples.size == self._Nsamp
+        assert self.Tkhsamples.size == self._Nsamp
+
+        self.period = compute_point_estimates(self.Psamples)
+        self.radius = compute_point_estimates(self.rpsamples)
+        self._check_if_rocky()
+        self.Xiron = compute_point_estimates(self.Xironsamples)
+        self.Xice = compute_point_estimates(self.Xicesamples)
+        self.Tkh = compute_point_estimates(self.Tkhsamples)
+
+        # define planet mass if provided
+        if np.all(mp != None):
+            self.mpsamples = np.repeat(mp, self._Nsamp) \
+                if type(mp) in [int,float] else \
+                   np.ascontiguousarray(mp)
+            self.mass = compute_point_estimates(self.mpsamples)
+            
+        else:
+            self.mpsamples, self.mass = None, None
+
+            
+
+    def _check_if_rocky(self):
+        '''
+        Return True if the planet lies beneath the radius valley.
+        Otherwise, return False.
+        '''
+        self.is_rocky = self.radius[0] < self._radius_transition
+
+        
+
+    def _compute_planet_params(self, star):
+        '''Compute stellar-dependent planetary parameters.'''
+        self.asamples = star.Mssamples**(1/3) * \
+            days2yrs(self.Psamples)**(2/3)
+        self.Teqsamples = (1-self.albedo)**(.25) * star.Teffsamples * \
+            np.sqrt(Rsun2cm(star.Rssamples) / (2*AU2cm(self.asamples)))
+
+        self.a = compute_point_estimates(self.asamples)
+        self.Teq = compute_point_estimates(self.Teqsamples)
+
+
+
+
+class photoevaporation:
+
+    def __init__(self, tps, value_errors=True, size=1):
+        '''Class to make calculations based on the photoevaporation model.'''
+        self.star = copy.copy(tps.star)
+        self.planet_rocky = copy.copy(tps.planet_rocky)
+        self.planet_gaseous = copy.copy(tps.planet_gaseous)
+        
+        # run the minimum mass calculation
+        kwargs = {'value_errors': value_errors, 'size':size}
+        self.compute_Mgas_min_photoevaporation(tps, **kwargs)
+        
+
+    def compute_Mgas_min_photoevaporation(self, tps, value_errors=True, size=1):
+        '''
+        Compute the minimum mass of the gaseous planet in order to be 
+        consistent with the photoevaporation scenerio. 
+
+        The minimum gaseous planet mass comes from equating the maximum mass 
+        loss time of the rocky planet (i.e. it just lost its primordial H/He 
+        envelope) to the minimum mass loss timescale for the gaseous planet.
+        '''
+        assert tps._is_complete  # system is setup for calculations
 
         # sample gaseous planet minimum masses
         N = int(size)
@@ -380,123 +539,40 @@ class two_planet_system:
             compute_point_estimates(self.planet_rocky.tmdotmax_samples)
         self.planet_rocky.depthenvmax = \
             compute_point_estimates(self.planet_rocky.depthenvmax_samples)
-        
-                    
-        
-
-class star:
-
-    def __init__(self, label, Nsamp, Ms, Rs, Teff, age):
-        '''
-        Initialize the host star.
-        '''
-        self.label = label
-        self._Nsamp = int(Nsamp)
-        self._define_stellar_params(Ms, Rs, Teff, age)
-
-
-    def _define_stellar_params(self, Ms, Rs, Teff, age):
-        '''Define stellar parameter point estimates and uncertainties.'''
-        self.Mssamples = np.repeat(Ms, self._Nsamp) if type(Ms) in [int,float] else \
-               np.ascontiguousarray(Ms)
-        self.Rssamples = np.repeat(Rs, self._Nsamp) if type(Rs) in [int,float] else \
-               np.ascontiguousarray(Rs)
-        self.Teffsamples = np.repeat(Teff, self._Nsamp) \
-            if type(Teff) in [int,float] else \
-               np.ascontiguousarray(Teff)
-        self.agesamples = np.repeat(age, self._Nsamp) \
-            if type(age) in [int,float] else \
-               np.ascontiguousarray(age)
-
-        assert self.Mssamples.size == self._Nsamp
-        assert self.Rssamples.size == self._Nsamp
-        assert self.Teffsamples.size == self._Nsamp
-        assert self.agesamples.size == self._Nsamp
-
-        self.mass = compute_point_estimates(self.Mssamples)
-        self.radius = compute_point_estimates(self.Rssamples)
-        self.Teff = compute_point_estimates(self.Teffsamples)
-        self.age = compute_point_estimates(self.agesamples)
 
         
 
 
-class planet:
+class corepoweredmassloss:
 
-    def __init__(self, label, Nsamp, P, rp, mp, Xiron, Xice, Tkh,
-                 radius_transition, albedo):
-        '''
-        Initialize one planet. 
-        '''
-        self.label = label
-        self._Nsamp = int(Nsamp)
-        self._radius_transition = float(radius_transition)
-        self.albedo = float(albedo)
-        self._define_planetary_params(P, rp, mp, Xiron, Xice, Tkh)
-
+    def __init__(self, tps, value_errors=True, size=1):
+        '''Class to make calculations based on the core-powered mass loss model.'''
+        self.star = copy.copy(tps.star)
+        self.planet_rocky = copy.copy(tps.planet_rocky)
+        self.planet_gaseous = copy.copy(tps.planet_gaseous)
+        
+        # run the minimum mass calculation
+        kwargs = {'value_errors': value_errors, 'size':size}
+        self.compute_Mgas_min_corepoweredmassloss(tps, **kwargs)
         
 
-    def _define_planetary_params(self, P, rp, mp, Xiron, Xice, Tkh):
-        self.Psamples = np.repeat(P, self._Nsamp) if type(P) in [int,float] else \
-               np.ascontiguousarray(P)
-        self.rpsamples = np.repeat(rp, self._Nsamp) if type(rp) in [int,float] else \
-               np.ascontiguousarray(rp)
-        self.Xironsamples = np.repeat(Xiron, self._Nsamp) \
-            if type(Xiron) in [int,float] else \
-               np.ascontiguousarray(Xiron)
-        assert np.all(self.Xironsamples >= 0) & np.all(self.Xironsamples <= 1)
-        self.Xicesamples = np.repeat(Xice, self._Nsamp) \
-            if type(Xice) in [int,float] else \
-               np.ascontiguousarray(Xice)
-        assert np.all(self.Xicesamples >= 0) & np.all(self.Xicesamples <= 1)
-        self.Tkhsamples = np.repeat(Tkh, self._Nsamp) \
-            if type(Tkh) in [int,float] else \
-               np.ascontiguousarray(Tkh)
-
-        assert self.Psamples.size == self._Nsamp
-        assert self.rpsamples.size == self._Nsamp
-        assert self.Xironsamples.size == self._Nsamp
-        assert self.Xicesamples.size == self._Nsamp
-        assert self.Tkhsamples.size == self._Nsamp
-
-        self.period = compute_point_estimates(self.Psamples)
-        self.radius = compute_point_estimates(self.rpsamples)
-        self._check_if_rocky()
-        self.Xiron = compute_point_estimates(self.Xironsamples)
-        self.Xice = compute_point_estimates(self.Xicesamples)
-        self.Tkh = compute_point_estimates(self.Tkhsamples)
-
-        # define planet mass if provided
-        if np.all(mp != None):
-            self.mpsamples = np.repeat(mp, self._Nsamp) \
-                if type(mp) in [int,float] else \
-                   np.ascontiguousarray(mp)
-            self.mass = compute_point_estimates(self.mpsamples)
-            
-        else:
-            self.mpsamples, self.mass = None, None
-
-            
-
-    def _check_if_rocky(self):
+    def compute_Mgas_min_corepoweredmassloss(self, tps, value_errors=True, size=1):
         '''
-        Return True if the planet lies beneath the radius valley.
-        Otherwise, return False.
+        Compute the minimum mass of the gaseous planet in order to be 
+        consistent with the core-powered mass loss scenerio. 
+
+        The minimum gaseous planet mass comes from equating the maximum mass 
+        loss time of the rocky planet (i.e. it just lost its primordial H/He 
+        envelope) to the minimum mass loss timescale for the gaseous planet.
         '''
-        self.is_rocky = self.radius[0] < self._radius_transition
+        assert tps._is_complete  # system is setup for calculations
+        **CONTINUE HERE**
+
+
+
+
 
         
-
-    def _compute_planet_params(self, star):
-        '''Compute stellar-dependent planetary parameters.'''
-        self.asamples = star.Mssamples**(1/3) * \
-            days2yrs(self.Psamples)**(2/3)
-        self.Teqsamples = (1-self.albedo)**(.25) * star.Teffsamples * \
-            np.sqrt(Rsun2cm(star.Rssamples) / (2*AU2cm(self.asamples)))
-
-        self.a = compute_point_estimates(self.asamples)
-        self.Teq = compute_point_estimates(self.Teqsamples)
-
 
 
 def compute_point_estimates(samples):
