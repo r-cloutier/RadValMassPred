@@ -133,7 +133,6 @@ def _Mp_gas_to_solve(lg_Mcore, P, Ms, Teq, Tkh, Xiron, Xice, Rp_now, age,
     tmdot_gaseous = Xenv * Mcore**2 * AU2cm(sma)**2 * eta / Rearth2cm(Rp_full)**3
     ##print(Xenv, Mcore, AU2cm(sma), eta, Rearth2cm(Rp_full), tmdot_gaseous)
 
-
     return tmdot_gaseous - tmdot_rocky
 
 
