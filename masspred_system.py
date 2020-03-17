@@ -2,6 +2,7 @@ from imports import *
 import planetary_structure as ps
 import photoevaporation as phev
 import corepoweredmassloss as cpml
+import gaspoorformation as gpf
 
 
 class two_planet_system:
@@ -92,8 +93,21 @@ class two_planet_system:
         kwargs = {'value_errors': value_errors, 'size':size}
         self.corepoweredmassloss = corepoweredmassloss(self, **kwargs)
 
+        
+
+    def compute_Mgas_min_gaspoorformation(self, value_errors=True, size=1):
+        '''
+        Compute the minimum mass of the gaseous planet in order to be 
+        consistent with the gas-poor formation scenerio. 
+
+        The minimum gaseous planet mass comes from its envelope mass fractions must 
+        exceed that of the rocky planet.
+        '''
+        kwargs = {'value_errors': value_errors, 'size':size}
+        self.gaspoorformation = gaspoorformation(self, **kwargs)
 
 
+        
 
 
 class star:
@@ -830,7 +844,108 @@ class corepoweredmassloss:
         
 
         
+class gaspoorformation:
 
+    def __init__(self, tps, value_errors=True, size=1):
+        '''Class to make calculations based on the gas-poor formation model.'''
+        self.star = copy.copy(tps.star)
+        self.planet_rocky = copy.copy(tps.planet_rocky)
+        self.planet_gaseous = copy.copy(tps.planet_gaseous)
+        
+        # run the minimum mass calculation
+        kwargs = {'value_errors': value_errors, 'size':size}
+        self._compute_Mgas_min_gaspoorformation(tps, **kwargs)
+
+
+    def _compute_Mgas_min_gaspoorformation(self, tps, value_errors=True, size=1):
+        '''
+        Compute the minimum mass of the gaseous planet in order to be 
+        consistent with the gas-poor formation scenerio. 
+
+        The minimum gaseous planet mass comes from its envelope mass fractions must 
+        exceed that of the rocky planet.
+        '''
+        assert tps._is_complete  # system is setup for calculations
+
+        # sample gaseous planet minimum masses
+        N = int(size)
+        self.planet_gaseous.Mmin_solution_samples = np.zeros(N)
+        self.planet_gaseous.Xenv_solution_samples = np.zeros(N)
+        self.planet_gaseous.taccrete_samples = np.zeros(N)
+        self.planet_gaseous.tdisk_samples = np.zeros(N)
+        self.planet_gaseous.is_consistent_gaspoorformation = np.zeros(N)
+        
+        
+        progress_bar = initialize_progressbar(N, "\nComputing the gaseous planet's minimum mass under gas-poor formation (%i realizations)\n"%N)
+        for i in range(N):
+
+            progress_bar.update(i+1)
+
+            # sample values for this realization
+            agei = sample(self.star.agesamples)
+            ai_rock = sample(self.planet_rocky.asamples)
+            Teqi_rock = sample(self.planet_rocky.Teqsamples)
+            rpi_rock = sample(self.planet_rocky.rpsamples)
+            mpi_rock = sample(self.planet_rocky.mpsamples)
+            Xironi_rock = sample(self.planet_rocky.Xironsamples)
+            Xicei_rock = sample(self.planet_rocky.Xicesamples)
+            ai_gas = sample(self.planet_gaseous.asamples)
+            Teqi_gas = sample(self.planet_gaseous.Teqsamples)
+            rpi_gas = sample(self.planet_gaseous.rpsamples)
+            mpi_gas = sample(self.planet_gaseous.mpsamples)
+            Xironi_gas = sample(self.planet_gaseous.Xironsamples)
+            Xicei_gas = sample(self.planet_gaseous.Xicesamples)
+            
+            # compare solid masses to derive minimum gaseous planet mass
+            args = mpi_rock, ai_rock, ai_gas
+            if value_errors:
+                self.planet_gaseous.Mmin_solution_samples[i]= gpf.compute_Mgas_min(*args)
+                argsX = rpi_gas, mpi_gas, Teqi_gas, agei, Xironi_gas, Xicei_gas
+                self.planet_gaseous.Xenv_solution_samples[i],_ = ps.Rp_solver_gas(*argsX)
+
+            else:
+                try:
+                    self.planet_gaseous.Mmin_solution_samples[i]= \
+                        gpf.compute_Mgas_min(*args)
+                    argsX = rpi_gas, mpi_gas, Teqi_gas, agei, Xironi_gas, Xicei_gas
+                    self.planet_gaseous.Xenv_solution_samples[i],_ = ps.Rp_solver_gas(*argsX)
+                    
+                except (ValueError, AssertionError):
+                    self.planet_gaseous.Mmin_solution_samples[i] = np.nan
+                    self.planet_gaseous.Xenv_solution_samples[i] = np.nan
+
+            # check that the gaseous planet can accrete enough gas to explain its
+            # radius before disk dispersal
+            self.planet_gaseous.tdisk_samples[i] = gpf.sample_disk_lifetime()
+            args = self.planet_gaseous.Xenv_solution_samples[i], Teqi_gas, mpi_gas
+            self.planet_gaseous.taccrete_samples[i] = gpf.solve_taccrete_gas(*args)
+            self.planet_gaseous.is_consistent_gaspoorformation[i] = \
+                    self.planet_gaseous.taccrete_samples[i] <= \
+                    self.planet_gaseous.tdisk_samples[i]
+
+            # is the minimum mass consistent with the core-powered mass loss model?
+            if np.isfinite(self.planet_gaseous.Mmin_solution_samples[i]):
+                self.planet_gaseous.is_consistent_gaspoorformation[i] *= \
+                    self.planet_gaseous.Mmin_solution_samples[i] < mpi_gas
+            else:
+                self.planet_gaseous.is_consistent_gaspoorformation[i] *= np.nan
+
+        close_progressbar(progress_bar)
+                    
+        # gather point estimates
+        self.planet_gaseous.Mmin_solution = \
+            compute_point_estimates(self.planet_gaseous.Mmin_solution_samples)
+        self.planet_gaseous.Xenv_solution = \
+            compute_point_estimates(self.planet_gaseous.Xenv_solution_samples)
+        self.planet_gaseous.taccrete = \
+            compute_point_estimates(self.planet_gaseous.taccrete_samples)
+        self.planet_gaseous.tdisk = \
+            compute_point_estimates(self.planet_gaseous.tdisk_samples)
+        g = np.isfinite(self.planet_gaseous.is_consistent_gaspoorformation)
+        self.planet_gaseous.frac_consistent_gaspoorformation = self.planet_gaseous.is_consistent_gaspoorformation[g].sum() / g.sum()
+
+    
+        
 
 def compute_point_estimates(samples):
     v = np.nanpercentile(samples, (16,50,84))

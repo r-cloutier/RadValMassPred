@@ -5,19 +5,8 @@ import planetary_structure as ps
 
 def compute_Mdot_energy_limited(Xenv, Mcore, Teq, Tkh, Xiron, Xice):
     '''Calculate the mass loss rate in the energy-limited regime.'''
-    # compute modified Bondi radius
-    RBp = (gamma-1)/gamma * compute_Bondi_radius(Mcore, Teq)
-    
-    # opacity at the rcb from Owen & Wu 2017
-    Rrcb,_,_ = ps.solve_radius_structure(Xenv, Mcore, Teq, Tkh, Xiron, Xice)
-    rho_rcb = ps.compute_rhorcb(Xenv, Rrcb, Mcore, Teq, Tkh, Xiron, Xice)
-    P_rcb = rho_rcb * Kb * Teq / mu
-    kappa = kappa0 * P_rcb**alpha * Teq**beta
-
     # planet cooling luminosity (Eq 6 in Gupta & Schlichting 2019)
-    Lcool = 64*np.pi/3
-    Lcool *= sigma*Teq**4 * Rearth2cm(RBp)
-    Lcool /= kappa*rho_rcb
+    _,Lcool,_ = ps.compute_cooling_time(Xenv, Mcore, Teq, Tkh, Xiron, Xice)
 
     # solve core
     Rcore = ps.mass2solidradius(Mcore, Xiron, Xice)
@@ -45,13 +34,6 @@ def compute_Mdot_Bondi_limited(Xenv, Mcore, Teq, Tkh, Xiron, Xice):
     Mdot_B *= np.exp(-G*Mearth2g(Mcore) / (cs**2 * Rearth2cm(Rrcb)))
     
     return Mdot_B
-
-
-
-def compute_Bondi_radius(Mcore, Teq):
-    cs2 = Kb * Teq / mu
-    RB = cm2Rearth(G * Mearth2g(Mcore) / cs2)
-    return RB
 
 
 

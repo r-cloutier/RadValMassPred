@@ -111,6 +111,42 @@ def compute_full_Rp(Rrcb, Mcore, Teq, rho_rcb):
 
 
 
+def compute_cooling_time(Xenv, Mcore, Teq, Tkh, Xiron, Xice):
+    '''Calculate the atmosphere gravitational energy, the cooling luminosity,
+    and the resulting cooling time.'''    
+    # compute modified Bondi radius
+    RBp = (gamma-1)/gamma * compute_Bondi_radius(Mcore, Teq)
+
+    # opacity at the rcb from Owen & Wu 2017
+    Rrcb,_,_ = solve_radius_structure(Xenv, Mcore, Teq, Tkh, Xiron, Xice)
+    rho_rcb = compute_rhorcb(Xenv, Rrcb, Mcore, Teq, Tkh, Xiron, Xice)
+    P_rcb = rho_rcb * Kb * Teq / mu
+    kappa = kappa0 * P_rcb**alpha * Teq**beta
+
+    # compute total energy as gravitational (Eq 4 Lee & Chiang 2015)
+    Rcore = mass2solidradius(Mcore, Xiron, Xice)
+    Etot = G * Mearth2g(Mcore) * Mearth2g(Xenv*Mcore) / Rearth2cm(Rcore)
+    
+    # planet cooling luminosity (Eq 6 in Gupta & Schlichting 2019)
+    # same results as with Eq 8 in Lee & Chiang 2015
+    Lcool = 64*np.pi/3
+    Lcool *= sigma*Teq**4 * Rearth2cm(RBp)
+    Lcool /= kappa*rho_rcb
+    
+    # get cooling time
+    tcool_Myr = sec2Myrs(Etot / Lcool)
+
+    return Etot, Lcool, tcool_Myr
+
+
+    
+def compute_Bondi_radius(Mcore, Teq):
+    cs2 = Kb * Teq / mu
+    RB = cm2Rearth(G * Mearth2g(Mcore) / cs2)
+    return RB
+    
+
+
 def compute_photosphere(Mp, Rp, Teq):
     '''Compute the pressure and density at the photosphere in cgs units.'''
     a = 1/(1+alpha)
