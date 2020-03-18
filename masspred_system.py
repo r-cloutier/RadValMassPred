@@ -18,8 +18,9 @@ class two_planet_system:
         self.radval_func = radval_func
         self.star, self.planet_rocky, self.planet_gaseous = None, None, None
         self.Nplanets = 0
-
-        
+        self._is_complete = False
+       
+ 
 
     def add_star(self, Ms, Rs, Teff, age=5e3, label=None):
         '''
@@ -107,7 +108,15 @@ class two_planet_system:
         self.gaspoorformation = gaspoorformation(self, **kwargs)
 
 
-        
+
+    def dump_pickle(self, fname, overwrite=False):
+        '''Pickle the object.'''
+        if (overwrite) | (not os.path.exists(fname)):
+            f = open(fname, 'wb')
+            pickle.dump(self, f)
+            f.close()
+
+
 
 
 class star:
@@ -999,3 +1008,10 @@ def close_progressbar(bar):
     dt = bar.seconds_elapsed
     print('Time elapsed = %.1f seconds (%.2f minutes).'%(dt,dt/60))
     bar.finish()
+
+
+def load_pickle(fname):
+    f = open(fname, 'rb')
+    tps = pickle.load(f)
+    f.close()
+    return tps
