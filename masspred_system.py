@@ -268,7 +268,7 @@ class photoevaporation:
         self.planet_gaseous.Rrcb_solution_samples = np.zeros(N)
         self.planet_gaseous.Rpfull_solution_samples = np.zeros(N)
         self.planet_gaseous.tmdot_solution_samples = np.zeros(N)
-        self.planet_gaseous.is_consistent_photoevap  = np.zeros(N)
+        self.planet_gaseous.is_consistent = np.zeros(N)
         
         self.planet_gaseous.Mcorerangemin_samples = np.zeros(N)
         self.planet_gaseous.Mcorerangemax_samples = np.zeros(N)
@@ -512,10 +512,10 @@ class photoevaporation:
 
             # is the minimum mass consistent with the photoevaporation model?
             if np.isfinite(self.planet_gaseous.Mmin_solution_samples[i]):
-                self.planet_gaseous.is_consistent_photoevap[i] = \
+                self.planet_gaseous.is_consistent[i] = \
                     self.planet_gaseous.Mmin_solution_samples[i] < mpi_gas
             else:
-                self.planet_gaseous.is_consistent_photoevap[i] = np.nan
+                self.planet_gaseous.is_consistent[i] = np.nan
                 
             # compute gaseous planet core radius
             self.planet_gaseous.Rcoremax_samples[i] = \
@@ -539,10 +539,10 @@ class photoevaporation:
             compute_point_estimates(self.planet_gaseous.Rpfull_solution_samples)
         self.planet_gaseous.tmdot_solution = \
             compute_point_estimates(self.planet_gaseous.tmdot_solution_samples)
-        g = np.isfinite(self.planet_gaseous.is_consistent_photoevap)
-        self.planet_gaseous.frac_consistent_photoevap = self.planet_gaseous.is_consistent_photoevap[g].sum() / g.sum()
-        self.planet_gaseous.success_photoevap_samples = np.isfinite(self.planet_gaseous.Mmin_solution_samples)
-        self.planet_gaseous.frac_success_photoevap = self.planet_gaseous.success_photoevap_samples.mean()
+        g = np.isfinite(self.planet_gaseous.is_consistent)
+        self.planet_gaseous.frac_consistent = self.planet_gaseous.is_consistent[g].sum() / g.sum()
+        self.planet_gaseous.success_samples = np.isfinite(self.planet_gaseous.Mmin_solution_samples)
+        self.planet_gaseous.frac_success = self.planet_gaseous.success_samples.mean()
         self.planet_gaseous.Mcorerangemin = \
             compute_point_estimates(self.planet_gaseous.Mcorerangemin_samples)
         self.planet_gaseous.Mcorerangemax = \
@@ -607,7 +607,7 @@ class corepoweredmassloss:
         self.planet_gaseous.Rrcb_solution_samples = np.zeros(N)
         self.planet_gaseous.Rpfull_solution_samples = np.zeros(N)
         self.planet_gaseous.tmdot_solution_samples = np.zeros(N)
-        self.planet_gaseous.is_consistent_corepoweredmassloss  = np.zeros(N)
+        self.planet_gaseous.is_consistent = np.zeros(N)
         
         self.planet_gaseous.Mcorerangemin_samples = np.zeros(N)
         self.planet_gaseous.Mcorerangemax_samples = np.zeros(N)
@@ -812,10 +812,10 @@ class corepoweredmassloss:
 
             # is the minimum mass consistent with the core-powered mass loss model?
             if np.isfinite(self.planet_gaseous.Mmin_solution_samples[i]):
-                self.planet_gaseous.is_consistent_corepoweredmassloss[i] = \
+                self.planet_gaseous.is_consistent[i] = \
                     self.planet_gaseous.Mmin_solution_samples[i] < mpi_gas
             else:
-                self.planet_gaseous.is_consistent_corepoweredmassloss[i] = np.nan
+                self.planet_gaseous.is_consistent[i] = np.nan
                 
             # compute gaseous planet core radius
             self.planet_gaseous.Rcoremax_samples[i] = \
@@ -839,10 +839,10 @@ class corepoweredmassloss:
             compute_point_estimates(self.planet_gaseous.Rpfull_solution_samples)
         self.planet_gaseous.tmdot_solution = \
             compute_point_estimates(self.planet_gaseous.tmdot_solution_samples)
-        g = np.isfinite(self.planet_gaseous.is_consistent_corepoweredmassloss)
-        self.planet_gaseous.frac_consistent_corepoweredmassloss = self.planet_gaseous.is_consistent_corepoweredmassloss[g].sum() / g.sum()
-        self.planet_gaseous.success_corepoweredmassloss_samples = np.isfinite(self.planet_gaseous.Mmin_solution_samples)
-        self.planet_gaseous.frac_success_corepoweredmassloss = self.planet_gaseous.success_corepoweredmassloss_samples.mean()
+        g = np.isfinite(self.planet_gaseous.is_consistent)
+        self.planet_gaseous.frac_consistent = self.planet_gaseous.is_consistent[g].sum() / g.sum()
+        self.planet_gaseous.success_samples = np.isfinite(self.planet_gaseous.Mmin_solution_samples)
+        self.planet_gaseous.frac_success = self.planet_gaseous.success_samples.mean()
         self.planet_gaseous.Mcorerangemin = \
             compute_point_estimates(self.planet_gaseous.Mcorerangemin_samples)
         self.planet_gaseous.Mcorerangemax = \
@@ -899,7 +899,7 @@ class gaspoorformation:
         self.planet_gaseous.Xenv_solution_samples = np.zeros(N)
         self.planet_gaseous.taccrete_samples = np.zeros(N)
         self.planet_gaseous.tdisk_samples = np.zeros(N)
-        self.planet_gaseous.is_consistent_gaspoorformation = np.zeros(N)
+        self.planet_gaseous.is_consistent = np.zeros(N)
         
         
         progress_bar = initialize_progressbar(N, "\nComputing the gaseous planet's minimum mass under gas-poor formation (%i realizations)\n"%N)
@@ -945,16 +945,16 @@ class gaspoorformation:
             self.planet_gaseous.tdisk_samples[i] = gpf.sample_disk_lifetime()
             args = self.planet_gaseous.Xenv_solution_samples[i], Teqi_gas, mpi_gas
             self.planet_gaseous.taccrete_samples[i] = gpf.solve_taccrete_gas(*args)
-            self.planet_gaseous.is_consistent_gaspoorformation[i] = \
+            self.planet_gaseous.is_consistent[i] = \
                     self.planet_gaseous.taccrete_samples[i] <= \
                     self.planet_gaseous.tdisk_samples[i]
 
             # is the minimum mass consistent with the core-powered mass loss model?
             if np.isfinite(self.planet_gaseous.Mmin_solution_samples[i]):
-                self.planet_gaseous.is_consistent_gaspoorformation[i] *= \
+                self.planet_gaseous.is_consistent[i] *= \
                     self.planet_gaseous.Mmin_solution_samples[i] < mpi_gas
             else:
-                self.planet_gaseous.is_consistent_gaspoorformation[i] *= np.nan
+                self.planet_gaseous.is_consistent[i] *= np.nan
 
         close_progressbar(progress_bar)
                     
@@ -967,10 +967,10 @@ class gaspoorformation:
             compute_point_estimates(self.planet_gaseous.taccrete_samples)
         self.planet_gaseous.tdisk = \
             compute_point_estimates(self.planet_gaseous.tdisk_samples)
-        g = np.isfinite(self.planet_gaseous.is_consistent_gaspoorformation)
-        self.planet_gaseous.frac_consistent_gaspoorformation = self.planet_gaseous.is_consistent_gaspoorformation[g].sum() / g.sum()
-        self.planet_gaseous.success_gaspoorformation_samples = np.isfinite(self.planet_gaseous.Mmin_solution_samples)
-        self.planet_gaseous.frac_success_gaspoorformation = self.planet_gaseous.success_gaspoorformation_samples.mean()
+        g = np.isfinite(self.planet_gaseous.is_consistent)
+        self.planet_gaseous.frac_consistent = self.planet_gaseous.is_consistent[g].sum() / g.sum()
+        self.planet_gaseous.success_samples = np.isfinite(self.planet_gaseous.Mmin_solution_samples)
+        self.planet_gaseous.frac_success = self.planet_gaseous.success_samples.mean()
 
         
     
