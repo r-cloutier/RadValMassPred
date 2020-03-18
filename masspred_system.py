@@ -414,12 +414,18 @@ class photoevaporation:
 
      
             # ensure that a solution exists
-            if (self.planet_gaseous.tmdotmax_samples[i] < self.planet_rocky.tmdotmax_samples[i]) | (self.planet_gaseous.Mcorerangemin_samples[i] > mpi_gas):
-                raise ValueError("No solution exists because the gaseous planet's maximum mass loss timescale is less than the rocky planet's maximum mass loss timescale.")
-            else:
-                self.planet_gaseous.Mcorerangemin_samples[i] = Mcore_gas_min
-            
+            if value_errors:
+                if (self.planet_gaseous.tmdotmax_samples[i] < self.planet_rocky.tmdotmax_samples[i]) | (self.planet_gaseous.Mcorerangemin_samples[i] > mpi_gas):
+                    raise ValueError("No solution exists because the gaseous planet's maximum mass loss timescale is less than the rocky planet's maximum mass loss timescale.")
+                else:
+                    self.planet_gaseous.Mcorerangemin_samples[i] = Mcore_gas_min
 
+            else:
+                if (self.planet_gaseous.tmdotmax_samples[i] < self.planet_rocky.tmdotmax_samples[i]) | (self.planet_gaseous.Mcorerangemin_samples[i] > mpi_gas):
+                    self.planet_gaseous.Mcorerangemin_samples[i] = np.nan
+                else:
+                    self.planet_gaseous.Mcorerangemin_samples[i] = Mcore_gas_min
+                        
             # just solved for minimum gaseous core mass to have a longer mass loss
             # time than the rocky planet
             # set maximum gaseous core mass for a pure iron ball
@@ -526,6 +532,8 @@ class photoevaporation:
             compute_point_estimates(self.planet_gaseous.tmdot_solution_samples)
         g = np.isfinite(self.planet_gaseous.is_consistent_photoevap)
         self.planet_gaseous.frac_consistent_photoevap = self.planet_gaseous.is_consistent_photoevap[g].sum() / g.sum()
+        self.planet_gaseous.success_photoevap_samples = np.isfinite(self.planet_gaseous.Mmin_solution_samples)
+        self.planet_gaseous.frac_success_photoevap = self.planet_gaseous.success_photoevap_samples.mean()
         self.planet_gaseous.Mcorerangemin = \
             compute_point_estimates(self.planet_gaseous.Mcorerangemin_samples)
         self.planet_gaseous.Mcorerangemax = \
@@ -712,10 +720,17 @@ class corepoweredmassloss:
                         
      
             # ensure that a solution exists
-            if (self.planet_gaseous.tmdotmax_samples[i] < self.planet_rocky.tmdotmax_samples[i]) | (self.planet_gaseous.Mcorerangemin_samples[i] > mpi_gas):
-                raise ValueError("No solution exists because the gaseous planet's maximum mass loss timescale is less than the rocky planet's maximum mass loss timescale.")
+            if value_errors:
+                if (self.planet_gaseous.tmdotmax_samples[i] < self.planet_rocky.tmdotmax_samples[i]) | (self.planet_gaseous.Mcorerangemin_samples[i] > mpi_gas):
+                    raise ValueError("No solution exists because the gaseous planet's maximum mass loss timescale is less than the rocky planet's maximum mass loss timescale.")
+                else:
+                    self.planet_gaseous.Mcorerangemin_samples[i] = Mcore_gas_min
+
             else:
-                self.planet_gaseous.Mcorerangemin_samples[i] = Mcore_gas_min
+                if (self.planet_gaseous.tmdotmax_samples[i] < self.planet_rocky.tmdotmax_samples[i]) | (self.planet_gaseous.Mcorerangemin_samples[i] > mpi_gas):
+                    self.planet_gaseous.Mcorerangemin_samples[i] = np.nan
+                else:
+                    self.planet_gaseous.Mcorerangemin_samples[i] = Mcore_gas_min
 
 
             # just solved for minimum gaseous core mass to have a longer mass loss
@@ -817,6 +832,8 @@ class corepoweredmassloss:
             compute_point_estimates(self.planet_gaseous.tmdot_solution_samples)
         g = np.isfinite(self.planet_gaseous.is_consistent_corepoweredmassloss)
         self.planet_gaseous.frac_consistent_corepoweredmassloss = self.planet_gaseous.is_consistent_corepoweredmassloss[g].sum() / g.sum()
+        self.planet_gaseous.success_corepoweredmassloss_samples = np.isfinite(self.planet_gaseous.Mmin_solution_samples)
+        self.planet_gaseous.frac_success_corepoweredmassloss = self.planet_gaseous.success_corepoweredmassloss_samples.mean()
         self.planet_gaseous.Mcorerangemin = \
             compute_point_estimates(self.planet_gaseous.Mcorerangemin_samples)
         self.planet_gaseous.Mcorerangemax = \
@@ -943,7 +960,10 @@ class gaspoorformation:
             compute_point_estimates(self.planet_gaseous.tdisk_samples)
         g = np.isfinite(self.planet_gaseous.is_consistent_gaspoorformation)
         self.planet_gaseous.frac_consistent_gaspoorformation = self.planet_gaseous.is_consistent_gaspoorformation[g].sum() / g.sum()
+        self.planet_gaseous.success_gaspoorformation_samples = np.isfinite(self.planet_gaseous.Mmin_solution_samples)
+        self.planet_gaseous.frac_success_gaspoorformation = self.planet_gaseous.success_gaspoorformation_samples.mean()
 
+        
     
         
 

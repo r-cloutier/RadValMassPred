@@ -39,7 +39,7 @@ def compute_Mgas_min(Mp_rock, a_rock, a_gas):
     Compute the minimum mass of the gaseous planet in order to be consistent
     with the gas-poor formation scenerio.
     '''
-    return Mp_rock * (a_rock/a_gas)**(.6)
+    return Mp_rock * (a_gas/a_rock)**(.6)
 
 
 
