@@ -3,6 +3,7 @@ import planetary_structure as ps
 import photoevaporation as phev
 import corepoweredmassloss as cpml
 import gaspoorformation as gpf
+from visualize import *
 
 
 class two_planet_system:
@@ -117,7 +118,16 @@ class two_planet_system:
             f.close()
 
 
+            
+    def plot_Mmin_histograms(self, outfile='', **kwargs):
+        '''Plot the distribution of minimum masses for each physical model and 
+        compare it to the gaseous planet's measured mass.'''
+        kwargs['outfile'] = outfile
+        plot_Mmin_histograms(two_planet_system, **kwargs)
 
+        
+
+            
 
 class star:
 
