@@ -123,7 +123,7 @@ class two_planet_system:
         '''Plot the distribution of minimum masses for each physical model and 
         compare it to the gaseous planet's measured mass.'''
         kwargs['outfile'] = outfile
-        plot_Mmin_histograms(two_planet_system, **kwargs)
+        plot_Mmin_histograms(self, **kwargs)
 
         
 

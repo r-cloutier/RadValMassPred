@@ -4,29 +4,39 @@ from imports import *
 def plot_Mmin_histograms(two_planet_system, outfile='', **kwargs):
     '''Plot the distribution of minimum masses for each physical model and 
     compare it to the gaseous planet's measured mass.'''
+    # add available mechanisms
     self = copy.copy(two_planet_system)
-    tps_mechanism = self.photoevaporation, self.corepoweredmassloss, self.gaspoorformation
-    label_mechanism = 'Photoevaporation', 'Core-powered mass loss', 'Gas-poor formation'
-    
+    labels = {'photoevaporation': 'Photoevaporation',
+              'corepoweredmassloss': 'Core-powered mass loss',
+              'gaspoorformation': 'Gas-poor formation'}
+    tps_mechanism, label_mechanism = [], []
+    for s in labels.keys():
+        try:
+            tps_mechanism.append(getattr(self, s))
+            label_mechanism.append(labels[s])
+        except AttributeError:
+            pass
+
+    Nmech = len(tps_mechanism)
+    assert len(label_mechanism) == Nmech
+        
     # customize plots
     if 'bins' in kwargs.keys():
         bins = kwargs['bins']
         log = not np.all(np.isclose(np.diff(bins), np.diff(bins)[0], rtol=1e-4))
     else:
         bins, log = 20, False
-    
-    fig, axs = plt.subplots(1, 3, sharex=True, figsize=(11,4))
-    for i in range(3):
 
-        # plot minimum masses
-        try:
-            g = np.isfinite(tps_mechanism[i].planet_gaseous.Mmin_solution_samples)
-            y, x_edges = np.histogram(tps_mechanism[i].planet_gaseous.Mmin_solution_samples[g], bins=bins)
-            x_edges = _get_bin_edges(x_edges, log)
-            _=axs[i].step(x_edges, y, ls='-', color='k', lw=2,
-                          label='Calcuated\nminimum mass')
-        except AttributeError:
-            pass
+    fig, axs = plt.subplots(1, Nmech, sharex=True, figsize=(3.3*Nmech,4))
+    axs = [axs] if Nmech == 1 else axs
+    for i in range(Nmech):
+
+        # plot minimum masses for this mechanism if available
+        g = np.isfinite(tps_mechanism[i].planet_gaseous.Mmin_solution_samples)
+        y, x_edges = np.histogram(tps_mechanism[i].planet_gaseous.Mmin_solution_samples[g], bins=bins)
+        x_edges = _get_bin_edges(x_edges, log)
+        _=axs[i].step(x_edges, y, ls='-', color='k', lw=2,
+                      label='Calculated\nminimum mass\n(%s)'%label_mechanism[i])
             
         # plot measured gaseous planet mass
         y2, x_edges = np.histogram(self.planet_gaseous.mpsamples, bins=bins)
