@@ -252,11 +252,21 @@ class photoevaporation:
         self.star = copy.copy(tps.star)
         self.planet_rocky = copy.copy(tps.planet_rocky)
         self.planet_gaseous = copy.copy(tps.planet_gaseous)
-        #self = copy.copy(tps)
         
         # run the minimum mass calculation
         kwargs = {'value_errors': value_errors, 'size':size}
         self._compute_Mgas_min_photoevaporation(tps, **kwargs)
+        
+        
+        
+    def report_results(self):
+        '''An easy access function to print results.'''
+        if self.DONE:
+            print('Gaseous planet measured mass = %.3f + %.3f - %.3f Earth masses'%(self.planet_gaseous.mass))
+            print('Gaseous planet minimum mass = %.3f + %.3f - %.3f Earth masses'%(self.planet_gaseous.Mmin_solution))
+            print('Photoevaporation consistency rate = %.3f'%self.planet_gaseous.frac_consistent)
+            print('Planet model success rate = %.3f'%self.planet_gaseous.frac_success)
+
         
 
     def _compute_Mgas_min_photoevaporation(self, tps, value_errors=True, size=1):
@@ -301,7 +311,7 @@ class photoevaporation:
         progress_bar = initialize_progressbar(N, "\nComputing the gaseous planet's minimum mass under photoevaporation (%i realizations)\n"%N)
         for i in range(N):
 
-            progress_bar.update(i+1)
+            if progress_bar != None: progress_bar.update(i+1)
 
             # sample values for this realization
             Msi = sample(self.star.Mssamples)
@@ -534,7 +544,7 @@ class photoevaporation:
                 ps.mass2solidradius(self.planet_gaseous.Mmin_solution_samples[i]/self.planet_gaseous.Xenv_solution_samples[i], *args[-2:])
 
         
-        close_progressbar(progress_bar)
+        if progress_bar != None: close_progressbar(progress_bar)
                     
         # gather point estimates
         self.planet_gaseous.Mmin_solution = \
@@ -582,6 +592,7 @@ class photoevaporation:
         self.planet_rocky.depthenvmax = \
             compute_point_estimates(self.planet_rocky.depthenvmax_samples)
 
+        self.DONE = True
         
 
 
@@ -598,6 +609,16 @@ class corepoweredmassloss:
         self._compute_Mgas_min_corepoweredmassloss(tps, **kwargs)
 
 
+        
+    def report_results(self):
+        '''An easy access function to print results.'''
+        if self.DONE:
+            print('Gaseous planet measured mass = %.3f + %.3f - %.3f Earth masses'%(self.planet_gaseous.mass))
+            print('Gaseous planet minimum mass = %.3f + %.3f - %.3f Earth masses'%(self.planet_gaseous.Mmin_solution))
+            print('Core-powered mass loss consistency rate = %.3f'%self.planet_gaseous.frac_consistent)
+            print('Planet model success rate = %.3f'%self.planet_gaseous.frac_success)
+
+            
     def _compute_Mgas_min_corepoweredmassloss(self, tps, value_errors=True, size=1):
         '''
         Compute the minimum mass of the gaseous planet in order to be 
@@ -637,7 +658,7 @@ class corepoweredmassloss:
         progress_bar = initialize_progressbar(N, "\nComputing the gaseous planet's minimum mass under core-powered mass loss (%i realizations)\n"%N)
         for i in range(N):
 
-            progress_bar.update(i+1)
+            if progress_bar != None: progress_bar.update(i+1)
 
             # sample values for this realization
             Msi = sample(self.star.Mssamples)
@@ -834,7 +855,7 @@ class corepoweredmassloss:
                 ps.mass2solidradius(self.planet_gaseous.Mmin_solution_samples[i]/self.planet_gaseous.Xenv_solution_samples[i], *args[-2:])
 
         
-        close_progressbar(progress_bar)
+        if progress_bar != None: close_progressbar(progress_bar)
                     
         # gather point estimates
         self.planet_gaseous.Mmin_solution = \
@@ -878,7 +899,9 @@ class corepoweredmassloss:
         self.planet_rocky.tmdotmax = \
             compute_point_estimates(self.planet_rocky.tmdotmax_samples)
         
+        self.DONE = True
 
+        
         
 class gaspoorformation:
 
@@ -893,6 +916,17 @@ class gaspoorformation:
         self._compute_Mgas_min_gaspoorformation(tps, **kwargs)
 
 
+
+    def report_results(self):
+        '''An easy access function to print results.'''
+        if self.DONE:
+            print('Gaseous planet measured mass = %.3f + %.3f - %.3f Earth masses'%(self.planet_gaseous.mass))
+            print('Gaseous planet minimum mass = %.3f + %.3f - %.3f Earth masses'%(self.planet_gaseous.Mmin_solution))
+            print('Gas-poor formation consistency rate = %.3f'%self.planet_gaseous.frac_consistent)
+            print('Planet model success rate = %.3f'%self.planet_gaseous.frac_success)
+
+
+            
     def _compute_Mgas_min_gaspoorformation(self, tps, value_errors=True, size=1):
         '''
         Compute the minimum mass of the gaseous planet in order to be 
@@ -915,7 +949,7 @@ class gaspoorformation:
         progress_bar = initialize_progressbar(N, "\nComputing the gaseous planet's minimum mass under gas-poor formation (%i realizations)\n"%N)
         for i in range(N):
 
-            progress_bar.update(i+1)
+            if progress_bar != None: progress_bar.update(i+1)
 
             # sample values for this realization
             agei = sample(self.star.agesamples)
@@ -966,7 +1000,7 @@ class gaspoorformation:
             else:
                 self.planet_gaseous.is_consistent[i] *= np.nan
 
-        close_progressbar(progress_bar)
+        if progress_bar != None: close_progressbar(progress_bar)
                     
         # gather point estimates
         self.planet_gaseous.Mmin_solution = \
@@ -982,6 +1016,7 @@ class gaspoorformation:
         self.planet_gaseous.success_samples = np.isfinite(self.planet_gaseous.Mmin_solution_samples)
         self.planet_gaseous.frac_success = self.planet_gaseous.success_samples.mean()
 
+        self.DONE = True
         
     
         
