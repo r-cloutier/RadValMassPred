@@ -14,7 +14,7 @@ class two_planet_system:
         that span the radius valley as defined in the input function 
         radval_func.
         '''
-        self.label = label
+        self.label = label.replace(' ','')
         self._Nsamp = int(Nsamp)
         self.radval_func = radval_func
         self.star, self.planet_rocky, self.planet_gaseous = None, None, None
@@ -116,6 +116,9 @@ class two_planet_system:
             f = open(fname, 'wb')
             pickle.dump(self, f)
             f.close()
+            return True
+        else:
+            return False
 
 
             
@@ -123,7 +126,7 @@ class two_planet_system:
         '''Plot the distribution of minimum masses for each physical model and 
         compare it to the gaseous planet's measured mass.'''
         kwargs['outfile'] = outfile
-        plot_Mmin_histograms(self, **kwargs)
+        plot_Mmin_histograms_width(self, **kwargs)
 
         
 
@@ -282,6 +285,7 @@ class photoevaporation:
 
         # sample gaseous planet minimum masses
         N = int(size)
+        self.Nrealizations = N
         self.planet_gaseous.Mmin_solution_samples = np.zeros(N)
         self.planet_gaseous.Xenv_solution_samples = np.zeros(N)
         self.planet_gaseous.Rcore_solution_samples = np.zeros(N)
@@ -632,6 +636,7 @@ class corepoweredmassloss:
 
         # sample gaseous planet minimum masses
         N = int(size)
+        self.Nrealizations = N
         self.planet_gaseous.Mmin_solution_samples = np.zeros(N)
         self.planet_gaseous.Xenv_solution_samples = np.zeros(N)
         self.planet_gaseous.Rcore_solution_samples = np.zeros(N)
@@ -939,6 +944,7 @@ class gaspoorformation:
 
         # sample gaseous planet minimum masses
         N = int(size)
+        self.Nrealizations = N
         self.planet_gaseous.Mmin_solution_samples = np.zeros(N)
         self.planet_gaseous.Xenv_solution_samples = np.zeros(N)
         self.planet_gaseous.taccrete_samples = np.zeros(N)
